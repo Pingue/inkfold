@@ -47,6 +47,7 @@ jobs:
           # reading/searching the repo, editing files, and running git/gh to
           # branch, commit, push and open the PR.
           claude_args: |
+            --model claude-sonnet-5
             --allowedTools "Read,Edit,MultiEdit,Write,Glob,Grep,LS,Bash(git:*),Bash(gh:*)"
           prompt: |
             The repo owner just approved issue #${{ github.event.issue.number }}
