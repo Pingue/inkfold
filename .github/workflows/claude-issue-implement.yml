@@ -1,10 +1,12 @@
 name: Claude - implement approved issues
 
 # Fires when the repo owner comments exactly "/approve" on an issue (not a
-# PR). Claude implements the plan it posted earlier on that issue, pushes a
-# branch, and opens a pull request referencing it — it never merges. The PR
-# itself is the approval gate from here: nothing lands without a human
-# reviewing and merging it.
+# PR). This is Claude's only step that calls the API and costs anything -
+# claude-issue-plan.yml just posts a static comment, no AI involved. Claude
+# reads the issue fresh here (there's no separate plan comment to re-read),
+# implements it, pushes a branch, and opens a pull request - it never
+# merges. The PR itself is the real approval gate from here: nothing lands
+# without a human reviewing and merging it.
 
 on:
   issue_comment:
@@ -29,26 +31,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Implement the approved plan
+      - name: Implement the approved issue
         uses: anthropics/claude-code-action@main
         with:
           prompt: |
-            Issue #${{ github.event.issue.number }} on this repository has an
-            implementation plan you posted earlier in this thread, and the repo
-            owner has just approved it by commenting `/approve`.
+            The repo owner just approved issue #${{ github.event.issue.number }}
+            on this repository by commenting `/approve`. Nothing has looked at
+            this issue yet beyond posting that approval prompt - read it fresh.
 
-            1. Re-read the issue and your earlier plan comment on it.
+            1. Read the issue (and any other comments on it) and enough of the
+               codebase to understand the request or bug.
             2. Create a new branch named `claude/issue-${{ github.event.issue.number }}`.
-            3. Implement the plan.
+            3. Implement it.
             4. Commit and push the branch.
             5. Open a pull request from that branch against the repository's
-               default branch, with a body that includes the line
-               `Closes #${{ github.event.issue.number }}`.
+               default branch. In the body, explain your understanding of the
+               request and what you changed (this is the first time anyone
+               sees your plan, since there was no separate planning pass), and
+               include the line `Closes #${{ github.event.issue.number }}`.
             6. Post a short comment on the issue linking the pull request.
 
-            Do not merge the pull request — a human reviews and merges it.
-            If, once you're actually implementing it, the plan turns out to be
-            wrong or incomplete in some way that changes the approach, post a
-            comment explaining that instead of guessing silently.
+            Do not merge the pull request - a human reviews and merges it.
+            If the issue is too vague or ambiguous to implement confidently,
+            don't guess: post a comment on the issue asking for clarification
+            instead of opening a pull request.
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

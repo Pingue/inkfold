@@ -112,19 +112,24 @@ it onto your device.
 ### Claude-assisted issue triage
 
 Two workflows let Claude turn a GitHub issue into a pull request, with a
-human approval step in between so nothing gets implemented unasked:
+human approval step *before* any AI call is made, so nothing costs API usage
+or gets implemented unasked:
 
-- **`claude-issue-plan.yml`** — when an issue is opened, Claude reads it and
-  the codebase, then posts a comment with its understanding of the request
-  and a proposed implementation plan. It writes no code at this stage.
-- **`claude-issue-implement.yml`** — when the repo owner comments exactly
-  `/approve` on that issue, Claude implements the plan, pushes a branch, and
-  opens a pull request referencing the issue. It never merges; the PR itself
-  is the second approval gate, reviewed and merged like any other.
+- **`claude-issue-plan.yml`** — when an issue is opened, posts a static
+  comment: *"This will be addressed by Claude. The repository owner needs to
+  comment `/approve` to continue."* No AI call here — it's a plain GitHub
+  Actions script, so this step is free and doesn't need any secret.
+- **`claude-issue-implement.yml`** — only when the repo owner comments
+  exactly `/approve` on that issue does Claude get invoked at all: it reads
+  the issue, implements it, pushes a branch, and opens a pull request
+  referencing the issue. It never merges; the PR itself is the second
+  approval gate, reviewed and merged like any other.
 
-Both need an `ANTHROPIC_API_KEY` repository secret (**Settings → Secrets and
-variables → Actions**) to call Claude; without it, they fail harmlessly (the
-`build.yml` CI workflow is unaffected).
+`claude-issue-implement.yml` needs an `ANTHROPIC_API_KEY` repository secret
+(**Settings → Secrets and variables → Actions**) to call Claude; without it,
+approving an issue just fails harmlessly (the `build.yml` CI workflow is
+unaffected, and no AI usage is incurred either way until you comment
+`/approve`).
 
 ## Enabling Google Drive sync
 
