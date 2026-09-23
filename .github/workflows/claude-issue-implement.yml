@@ -1,0 +1,54 @@
+name: Claude - implement approved issues
+
+# Fires when the repo owner comments exactly "/approve" on an issue (not a
+# PR). Claude implements the plan it posted earlier on that issue, pushes a
+# branch, and opens a pull request referencing it — it never merges. The PR
+# itself is the approval gate from here: nothing lands without a human
+# reviewing and merging it.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  implement:
+    # Only a plain issue comment (issue_comment also fires for PR comments,
+    # where github.event.issue.pull_request is present), only the exact
+    # "/approve" text, and only from the repo owner.
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.comment.body == '/approve' &&
+      github.event.comment.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Implement the approved plan
+        uses: anthropics/claude-code-action@main
+        with:
+          prompt: |
+            Issue #${{ github.event.issue.number }} on this repository has an
+            implementation plan you posted earlier in this thread, and the repo
+            owner has just approved it by commenting `/approve`.
+
+            1. Re-read the issue and your earlier plan comment on it.
+            2. Create a new branch named `claude/issue-${{ github.event.issue.number }}`.
+            3. Implement the plan.
+            4. Commit and push the branch.
+            5. Open a pull request from that branch against the repository's
+               default branch, with a body that includes the line
+               `Closes #${{ github.event.issue.number }}`.
+            6. Post a short comment on the issue linking the pull request.
+
+            Do not merge the pull request — a human reviews and merges it.
+            If, once you're actually implementing it, the plan turns out to be
+            wrong or incomplete in some way that changes the approach, post a
+            comment explaining that instead of guessing silently.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

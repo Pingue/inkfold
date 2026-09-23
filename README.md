@@ -109,6 +109,23 @@ manual dispatch). It:
 Download the APK from the **Artifacts** section of a completed run and sideload
 it onto your device.
 
+### Claude-assisted issue triage
+
+Two workflows let Claude turn a GitHub issue into a pull request, with a
+human approval step in between so nothing gets implemented unasked:
+
+- **`claude-issue-plan.yml`** — when an issue is opened, Claude reads it and
+  the codebase, then posts a comment with its understanding of the request
+  and a proposed implementation plan. It writes no code at this stage.
+- **`claude-issue-implement.yml`** — when the repo owner comments exactly
+  `/approve` on that issue, Claude implements the plan, pushes a branch, and
+  opens a pull request referencing the issue. It never merges; the PR itself
+  is the second approval gate, reviewed and merged like any other.
+
+Both need an `ANTHROPIC_API_KEY` repository secret (**Settings → Secrets and
+variables → Actions**) to call Claude; without it, they fail harmlessly (the
+`build.yml` CI workflow is unaffected).
+
 ## Enabling Google Drive sync
 
 The app works without sign-in; sync is optional. To enable it you must create
