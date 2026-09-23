@@ -16,6 +16,11 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # claude-code-action authenticates by exchanging a short-lived OIDC token
+  # for a scoped GitHub token; without this, it fails before it ever gets to
+  # using ANTHROPIC_API_KEY (confirmed via a failed run on the old plan
+  # step: "Could not fetch an OIDC token... add id-token: write").
+  id-token: write
 
 jobs:
   implement:
