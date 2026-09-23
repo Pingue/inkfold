@@ -4,8 +4,8 @@ A pen-first note-taking app for Android phones and tablets. Write with a stylus
 or your finger, organise notes into multi-page files, and sync everything to a
 folder in your Google Drive with a local cache for offline use.
 
-This app is intended for personal/sideloaded use — it is **not** meant to be
-published to the Play Store.
+This app is built with Google Play distribution in mind; the debug and (when
+configured) signed release builds from CI can also be sideloaded directly.
 
 ## Features
 
@@ -59,10 +59,12 @@ published to the Play Store.
   stroke data (pressure, tool, colour) in `<metadata>`, so the app reloads it
   losslessly. This folder is also the offline cache. See `model/Notebook.kt`,
   `storage/DocumentRepository.kt`, and `drawing/SvgPage.kt`.
-- Drive access uses Google Sign-In with the `drive.file` scope and the Drive v3
-  REST API over OkHttp. Each document is a sub-folder of a `PenNotes` Drive
-  folder; the app lists those sub-folders as documents. The app can only see
-  files it creates.
+- Drive access uses the Play Services `AuthorizationClient` API to grant the
+  `drive.file` scope (a system account picker chooses the Google account, then
+  a consent screen requests Drive access if it isn't already granted), and the
+  Drive v3 REST API over OkHttp for sync itself. Each document is a sub-folder
+  of a `PenNotes` Drive folder; the app lists those sub-folders as documents.
+  The app can only see files it creates.
 - Export uses Android's `PdfDocument` and `Bitmap` APIs. On-screen and exported
   rendering share one code path (`drawing/StrokeRenderer.kt`).
 
@@ -82,7 +84,7 @@ app/src/main/java/app/pennotes/
 
 ## Building
 
-You need JDK 17 and the Android SDK (`compileSdk` 35). The Gradle wrapper is
+You need JDK 17 and the Android SDK (`compileSdk` 36). The Gradle wrapper is
 checked in.
 
 ```bash
@@ -108,7 +110,11 @@ manual dispatch). It:
 1. sets up JDK 17 and the Android SDK,
 2. builds the debug APK (`assembleDebug`),
 3. runs Android Lint (`lintDebug`),
-4. uploads the APK as a build artifact (`pennotes-debug-apk`).
+4. uploads the APK as a build artifact (`pennotes-debug-apk`),
+5. when the release keystore secrets are configured (see below), also builds
+   a signed release APK (`pennotes-release-apk`) and a signed release AAB
+   (`pennotes-release-aab`) — the AAB is the format the Play Console requires
+   for a Play Store upload.
 
 Download the APK from the **Artifacts** section of a completed run and sideload
 it onto your device.
@@ -158,7 +164,9 @@ signing certificate.
      SHA-1 of whichever keystore you actually install from — typically build and
      install locally for a stable fingerprint.)
 4. Install the app, open the overflow menu on the home screen, and choose
-   **Sign in to Google Drive**. Use the cloud icon to sync on demand.
+   **Sign in to Google Drive**. You'll be asked to pick a Google account from
+   the system account picker, then (the first time) to grant Drive access.
+   Use the cloud icon to sync on demand.
 
 No API keys or secrets are stored in the repo — Android OAuth clients are
 identified by package name + signing certificate, not a secret.
@@ -199,8 +207,8 @@ you point the debug build at it; simplest is to just use the release artifact.
 
 ### Troubleshooting sign-in
 
-If the account picker appears, flickers, and closes without signing in, the
-app will show **"Drive sign-in failed (error 10)"**. Error 10 is
+If the Drive consent screen appears, flickers, and closes without granting
+access, the app will show **"Drive sign-in failed (error 10)"**. Error 10 is
 `DEVELOPER_ERROR`: the certificate the installed APK is signed with has no
 matching Android OAuth client in your Google Cloud project. Register the SHA-1
 of the exact keystore you installed from (see step 3 above) and add your
