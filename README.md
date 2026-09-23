@@ -96,6 +96,10 @@ checked in.
 
 Open the folder in Android Studio (Koala or newer) for day-to-day development.
 
+See [`CLAUDE.md`](CLAUDE.md) for the project's style guide (Kotlin/Android
+conventions and commit message format) — it applies to human and AI
+contributions alike.
+
 ## Continuous integration
 
 `.github/workflows/build.yml` runs on every push and pull request (and via
