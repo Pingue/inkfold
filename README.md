@@ -33,9 +33,9 @@ published to the Play Store.
 - **Undo / redo** for strokes and erases.
 - **Google Drive sync** — two-way sync to a `PenNotes` folder in your Drive,
   backed by a local cache so the app works fully offline. Syncs automatically
-  every few minutes while signed in (and on document close), plus on demand.
-  Conflicts resolve
-  last-write-wins by modification time.
+  every few minutes while the app is open (and on document close), plus a
+  periodic background sync via WorkManager while it's closed, plus on demand.
+  Conflicts resolve last-write-wins by modification time.
 - **Export** — save a notebook **PDF** to a chosen location via the system file
   picker, or share it; export each page as a **JPG**.
 - **Responsive** — a grid library on the home screen and a canvas that fits any
@@ -54,8 +54,8 @@ published to the Play Store.
     <pageId>.svg       # one self-describing SVG per page
   ```
   The `index.pennotes` manifest (kotlinx.serialization) lists pages in render
-  order; each entry has a `type` (`svg` today, `markdown` reserved for future
-  text pages). Each page SVG renders in any viewer **and** embeds the exact
+  order; each entry has a `type`, either `svg` (handwriting) or `markdown`
+  (text). Each page SVG renders in any viewer **and** embeds the exact
   stroke data (pressure, tool, colour) in `<metadata>`, so the app reloads it
   losslessly. This folder is also the offline cache. See `model/Notebook.kt`,
   `storage/DocumentRepository.kt`, and `drawing/SvgPage.kt`.
