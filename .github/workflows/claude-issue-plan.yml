@@ -1,43 +1,27 @@
-name: Claude - plan new issues
+name: Claude - notify on new issues
 
-# When someone opens an issue, Claude reads it, investigates the codebase, and
-# posts a comment with its understanding of the request and a proposed
-# implementation plan. It does NOT write or push any code in this pass — see
-# claude-issue-implement.yml for the step that actually implements it, gated
-# on a `/approve` comment from the repo owner.
+# When someone opens an issue, post a plain static comment - no AI call, no
+# API cost. Claude only does any actual work in claude-issue-implement.yml,
+# once the repo owner comments "/approve" on the issue.
 
 on:
   issues:
     types: [opened]
 
 permissions:
-  contents: read
   issues: write
 
 jobs:
-  plan:
+  notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Ask Claude for a plan
-        uses: anthropics/claude-code-action@main
+      - name: Post approval-gate comment
+        uses: actions/github-script@v7
         with:
-          prompt: |
-            A new issue was just opened on this repository (#${{ github.event.issue.number }}).
-
-            Read the issue and enough of the codebase to understand it, then post
-            ONE comment on this issue containing:
-              1. Your understanding of the request or bug, in your own words.
-              2. A concrete implementation plan: which files you'd touch, the
-                 approach, and any risks or open questions worth flagging before
-                 work starts.
-
-            Do NOT write or modify any files, and do NOT open a pull request —
-            this is a planning pass only. End your comment with exactly this
-            line, verbatim, on its own:
-
-            To implement this plan, comment `/approve`.
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "This will be addressed by Claude. The repository owner needs to comment `/approve` to continue.",
+            });
