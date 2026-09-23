@@ -21,14 +21,6 @@ permissions:
   # using ANTHROPIC_API_KEY (confirmed via a failed run on the old plan
   # step: "Could not fetch an OIDC token... add id-token: write").
   id-token: write
-  # Needed for any run whose implementation touches .github/workflows/* -
-  # GitHub rejects such a push with "refusing to allow a GitHub App to
-  # create or update workflow ... without `workflows` permission" otherwise,
-  # even though the Claude GitHub App installation itself already has
-  # workflows read/write (that's just the ceiling; this workflow's own
-  # token still has to request the scope). Confirmed via a real run on
-  # issue #7 that got all the way to pushing before hitting this.
-  workflows: write
 
 jobs:
   implement:
@@ -57,6 +49,16 @@ jobs:
           claude_args: |
             --model claude-sonnet-5
             --allowedTools "Read,Edit,MultiEdit,Write,Glob,Grep,LS,Bash(git:*),Bash(gh:*)"
+          # `workflows` is NOT a valid key in the standard `permissions:`
+          # block above (that block follows GitHub's own GITHUB_TOKEN
+          # schema, which has no such key - trying it breaks the whole
+          # workflow file's parsing, confirmed the hard way). Extra scopes
+          # for the GitHub App-minted token, like the one that lets a run
+          # touch .github/workflows/*, go through this action-specific
+          # input instead, validated by the action itself rather than
+          # GitHub's workflow-file schema.
+          additional_permissions: |
+            workflows: write
           prompt: |
             The repo owner just approved issue #${{ github.event.issue.number }}
             on this repository by commenting `/approve`. Nothing has looked at
