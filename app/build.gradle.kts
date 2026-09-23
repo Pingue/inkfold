@@ -13,8 +13,11 @@ android {
         applicationId = "app.pennotes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI overrides these via -PversionCodeOverride/-PversionNameOverride so
+        // released builds carry the semver-derived version computed in
+        // build.yml; local/default builds keep these hardcoded values.
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 1
+        versionName = project.findProperty("versionNameOverride") as String? ?: "1.0"
     }
 
     // Release signing is driven by environment variables so the keystore stays
