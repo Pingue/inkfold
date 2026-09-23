@@ -25,18 +25,36 @@ permissions:
 jobs:
   implement:
     # Only a plain issue comment (issue_comment also fires for PR comments,
-    # where github.event.issue.pull_request is present), only the exact
-    # "/approve" text, and only from the repo owner.
+    # where github.event.issue.pull_request is present), and only from the
+    # repo owner. The comment BODY itself isn't checked here - GitHub
+    # Actions' expression language has no trim(), so a job-level `==
+    # '/approve'` would silently reject a comment with a trailing space or
+    # newline (easy to get from mobile or autocomplete) with no error
+    # anywhere. That check is a step below instead, in real JS that can
+    # trim.
     if: >-
       github.event.issue.pull_request == null &&
-      github.event.comment.body == '/approve' &&
       github.event.comment.user.login == github.repository_owner
     runs-on: ubuntu-latest
     steps:
+      - name: Check for an exact /approve (trimmed)
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.comment.body.trim();
+            const approved = body === "/approve";
+            core.setOutput("approved", approved);
+            if (!approved) {
+              core.info(`Comment body (trimmed): ${JSON.stringify(body)} - not exactly "/approve", skipping.`);
+            }
+
       - name: Checkout
+        if: steps.gate.outputs.approved == 'true'
         uses: actions/checkout@v4
 
       - name: Implement the approved issue
+        if: steps.gate.outputs.approved == 'true'
         uses: anthropics/claude-code-action@main
         with:
           # Without an explicit allowlist, the action denies tool calls in
