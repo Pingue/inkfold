@@ -13,6 +13,7 @@ import app.pennotes.model.snapshot
 import app.pennotes.storage.DocumentRepository
 import app.pennotes.storage.DocumentSummary
 import app.pennotes.sync.DriveSync
+import app.pennotes.sync.SyncCoordinator
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.Job
@@ -53,6 +54,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
         refreshAccount()
         startAutoSync()
+        // Covers the case where the app is closed between in-app syncs; see
+        // SyncWorker's doc comment for how it avoids racing this loop.
+        if (driveSync.isSignedIn()) SyncCoordinator.schedulePeriodicSync(app)
     }
 
     /** Periodically syncs in the background while signed in (silent unless something changes). */
@@ -121,6 +125,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun signOut() {
+        SyncCoordinator.cancelPeriodicSync(getApplication())
         driveSync.signInClient().signOut().addOnCompleteListener { refreshAccount() }
     }
 
@@ -131,6 +136,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 .getResult(ApiException::class.java)
             signedInEmail = account.email
             statusMessage = "Signed in as ${account.email}"
+            SyncCoordinator.schedulePeriodicSync(getApplication())
             sync()
         } catch (e: ApiException) {
             refreshAccount()
@@ -152,7 +158,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             syncing = true
             if (!silent) statusMessage = "Syncing…"
-            val result = driveSync.sync()
+            // Shared with SyncWorker so a background pass never races this one.
+            val result = SyncCoordinator.exclusive { driveSync.sync() }
             syncing = false
             val changed = (result.uploaded + result.downloaded + result.deleted) > 0
             when {
