@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "app.pennotes"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.pennotes"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // CI overrides these via -PversionCodeOverride/-PversionNameOverride so
         // released builds carry the semver-derived version computed in
         // build.yml; local/default builds keep these hardcoded values.
@@ -37,7 +37,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

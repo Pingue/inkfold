@@ -1,14 +1,19 @@
 package app.pennotes.sync
 
+import android.accounts.Account
+import android.accounts.AccountManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.edit
 import app.pennotes.storage.DocumentRepository
 import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -19,6 +24,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URLEncoder
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /** Outcome of a sync pass, surfaced to the UI as a short status line. */
 data class SyncResult(
@@ -37,31 +44,75 @@ data class SyncResult(
  * and modification time in Drive appProperties. Conflicts resolve last-write-
  * wins per document; the app is fully usable offline.
  *
- * Uses the drive.file scope (access only to files this app creates). See the
- * README for the Google Cloud OAuth setup required to enable sync.
+ * Uses the drive.file scope (access only to files this app creates), granted
+ * via the AuthorizationClient API: the system account picker chooses which
+ * Google account to use, then [authorize] requests drive.file consent for it
+ * (skipped if already granted). This replaces the legacy GoogleSignIn sign-in
+ * flow, which play-services-auth 22 removes. See the README for the Google
+ * Cloud OAuth setup required to enable sync.
  */
 class DriveSync(private val context: Context, private val repo: DocumentRepository) {
 
     private val http = OkHttpClient()
+    private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
-    fun signInClient(): GoogleSignInClient {
-        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(DRIVE_FILE_SCOPE))
-            .build()
-        return GoogleSignIn.getClient(context, options)
+    /** Intent for the system's Google account picker; consent is requested separately via [authorize]. */
+    fun accountPickerIntent(): Intent =
+        AccountManager.newChooseAccountIntent(null, null, arrayOf(GOOGLE_ACCOUNT_TYPE), null, null, null, null)
+
+    /** Extracts the account chosen from an [accountPickerIntent] result, or null if the picker was cancelled. */
+    fun accountFromPickerResult(data: Intent?): Account? {
+        val name = data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME) ?: return null
+        return Account(name, GOOGLE_ACCOUNT_TYPE)
     }
 
-    fun currentAccount(): GoogleSignInAccount? = GoogleSignIn.getLastSignedInAccount(context)
+    fun currentAccount(): Account? {
+        val name = prefs.getString(KEY_ACCOUNT_NAME, null) ?: return null
+        return Account(name, GOOGLE_ACCOUNT_TYPE)
+    }
 
     fun isSignedIn(): Boolean = currentAccount() != null
 
+    /**
+     * Requests drive.file access for [account]. Returns a [PendingIntent] to launch
+     * for user consent if it isn't already granted, or null once access is confirmed
+     * (in which case [account] is persisted as the signed-in account immediately).
+     */
+    suspend fun authorize(account: Account): PendingIntent? {
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(Scope(DRIVE_FILE_SCOPE)))
+            .setAccount(account)
+            .build()
+        val result = Identity.getAuthorizationClient(context).authorize(request).await()
+        return if (result.hasResolution()) {
+            result.pendingIntent
+        } else {
+            markSignedIn(account)
+            null
+        }
+    }
+
+    /** Completes authorization after the user responds to the [authorize] consent intent. */
+    fun finishAuthorization(account: Account, data: Intent?): Boolean = runCatching {
+        Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
+        markSignedIn(account)
+        true
+    }.getOrDefault(false)
+
+    private fun markSignedIn(account: Account) {
+        prefs.edit { putString(KEY_ACCOUNT_NAME, account.name) }
+    }
+
+    /** Forgets the locally-stored account; does not revoke the Drive grant on Google's side. */
+    fun signOut() {
+        prefs.edit { remove(KEY_ACCOUNT_NAME) }
+    }
+
     suspend fun sync(): SyncResult = withContext(Dispatchers.IO) {
         val account = currentAccount() ?: return@withContext SyncResult(error = "Not signed in")
-        val androidAccount = account.account ?: return@withContext SyncResult(error = "No Google account")
 
         try {
-            val token = GoogleAuthUtil.getToken(context, androidAccount, "oauth2:$DRIVE_FILE_SCOPE")
+            val token = GoogleAuthUtil.getToken(context, account, "oauth2:$DRIVE_FILE_SCOPE")
             val rootId = ensureRootFolder(token)
             val remote = listRemoteDocs(rootId, token).associateBy { it.docId }
             val locals = repo.list().associateBy { it.id }
@@ -311,12 +362,21 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
+    /** Bridges a Play Services [Task] into a suspend call without pulling in kotlinx-coroutines-play-services. */
+    private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->
+        addOnSuccessListener { cont.resume(it) }
+        addOnFailureListener { cont.resumeWithException(it) }
+    }
+
     companion object {
         private const val DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
         private const val DRIVE_API = "https://www.googleapis.com/drive/v3"
         private const val UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
         private const val ROOT_NAME = "PenNotes"
         private const val FOLDER_MIME = "application/vnd.google-apps.folder"
+        private const val GOOGLE_ACCOUNT_TYPE = "com.google"
+        private const val PREFS_NAME = "drive_sync"
+        private const val KEY_ACCOUNT_NAME = "account_name"
         private val JSON_MEDIA = "application/json; charset=UTF-8".toMediaType()
     }
 }

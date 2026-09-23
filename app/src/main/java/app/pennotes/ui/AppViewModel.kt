@@ -1,7 +1,6 @@
 package app.pennotes.ui
 
 import android.app.Application
-import android.content.Intent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
@@ -14,7 +13,6 @@ import app.pennotes.storage.DocumentRepository
 import app.pennotes.storage.DocumentSummary
 import app.pennotes.sync.DriveSync
 import app.pennotes.sync.SyncCoordinator
-import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -74,7 +72,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshAccount() {
-        signedInEmail = driveSync.currentAccount()?.email
+        signedInEmail = driveSync.currentAccount()?.name
     }
 
     fun create(title: String) = viewModelScope.launch {
@@ -126,31 +124,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOut() {
         SyncCoordinator.cancelPeriodicSync(getApplication())
-        driveSync.signInClient().signOut().addOnCompleteListener { refreshAccount() }
+        driveSync.signOut()
+        refreshAccount()
     }
 
-    /** Parse the Google Sign-In result and surface a precise error if it failed. */
-    fun handleSignInResult(data: Intent?) {
-        try {
-            val account = GoogleSignIn.getSignedInAccountFromIntent(data)
-                .getResult(ApiException::class.java)
-            signedInEmail = account.email
-            statusMessage = "Signed in as ${account.email}"
-            SyncCoordinator.schedulePeriodicSync(getApplication())
-            sync()
-        } catch (e: ApiException) {
-            refreshAccount()
-            statusMessage = signInErrorMessage(e.statusCode)
-        }
+    /** Called once [DriveSync.authorize] (and any consent screen it triggered) succeeds. */
+    fun onDriveAuthorized() {
+        refreshAccount()
+        statusMessage = "Signed in as $signedInEmail"
+        SyncCoordinator.schedulePeriodicSync(getApplication())
+        sync()
     }
 
-    private fun signInErrorMessage(code: Int): String = when (code) {
+    /** Called when account selection or authorization fails or is cancelled. */
+    fun onDriveAuthorizationFailed(error: Throwable? = null, cancelled: Boolean = false) {
+        refreshAccount()
+        if (!cancelled) statusMessage = driveAuthorizationErrorMessage(error)
+    }
+
+    private fun driveAuthorizationErrorMessage(error: Throwable?): String = when {
         // CommonStatusCodes.DEVELOPER_ERROR
-        10 -> "Drive sign-in failed (error 10): this APK's signing certificate " +
-            "is not registered in a Google Cloud OAuth client. See the README."
-        12501 -> "Sign-in cancelled."
-        7 -> "Sign-in failed: network error."
-        else -> "Drive sign-in failed (error $code)."
+        error is ApiException && error.statusCode == 10 ->
+            "Drive sign-in failed (error 10): this APK's signing certificate " +
+                "is not registered in a Google Cloud OAuth client. See the README."
+        error is ApiException && error.statusCode == 12501 -> "Sign-in cancelled."
+        error is ApiException && error.statusCode == 7 -> "Sign-in failed: network error."
+        error is ApiException -> "Drive sign-in failed (error ${error.statusCode})."
+        else -> "Drive sign-in failed: ${error?.message ?: "unknown error"}"
     }
 
     fun sync(silent: Boolean = false) {

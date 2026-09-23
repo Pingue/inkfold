@@ -109,6 +109,27 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
+      # ---- Signed release AAB, for Play Store upload (only when the keystore secret is configured) ----
+      - name: Build signed release AAB
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease --stacktrace \
+            -PversionNameOverride="${{ steps.version.outputs.version_name }}" \
+            -PversionCodeOverride="${{ steps.version.outputs.version_code }}"
+
+      - name: Upload release AAB
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pennotes-release-aab
+          path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
       # ---- Tag and publish a GitHub release (only for builds on main) ----
       - name: Tag and create GitHub release
         if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
@@ -121,7 +142,7 @@ jobs:
 
           assets=(app/build/outputs/apk/debug/*.apk)
           if [ -n "$KEYSTORE_BASE64" ]; then
-            assets+=(app/build/outputs/apk/release/*.apk)
+            assets+=(app/build/outputs/apk/release/*.apk app/build/outputs/bundle/release/*.aab)
           fi
 
           gh release create "$tag" "${assets[@]}" \
