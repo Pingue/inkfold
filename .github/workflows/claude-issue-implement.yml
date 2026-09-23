@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Check for an exact /approve (trimmed)
         id: gate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const body = context.payload.comment.body.trim();
@@ -51,7 +51,7 @@ jobs:
 
       - name: Checkout
         if: steps.gate.outputs.approved == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Implement the approved issue
         if: steps.gate.outputs.approved == 'true'
