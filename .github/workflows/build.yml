@@ -16,7 +16,7 @@ jobs:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Need full history and tags to find the latest release tag below.
           fetch-depth: 0
