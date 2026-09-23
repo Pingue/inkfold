@@ -39,6 +39,15 @@ jobs:
       - name: Implement the approved issue
         uses: anthropics/claude-code-action@main
         with:
+          # Without an explicit allowlist, the action denies tool calls in
+          # this non-interactive CI run rather than prompting for approval -
+          # confirmed by a real /approve run that cost $0.07, made 7 turns,
+          # hit 5 permission denials, and produced no branch, no PR, and no
+          # comment. This grants exactly what the prompt below asks for:
+          # reading/searching the repo, editing files, and running git/gh to
+          # branch, commit, push and open the PR.
+          claude_args: |
+            --allowedTools "Read,Edit,MultiEdit,Write,Glob,Grep,LS,Bash(git:*),Bash(gh:*)"
           prompt: |
             The repo owner just approved issue #${{ github.event.issue.number }}
             on this repository by commenting `/approve`. Nothing has looked at
