@@ -1,4 +1,4 @@
-package app.inkfold.ui
+package uk.co.mfrost.inkfold.ui
 
 import android.app.Application
 import androidx.compose.runtime.getValue
@@ -7,12 +7,12 @@ import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import app.inkfold.model.Notebook
-import app.inkfold.model.snapshot
-import app.inkfold.storage.DocumentRepository
-import app.inkfold.storage.DocumentSummary
-import app.inkfold.sync.DriveSync
-import app.inkfold.sync.SyncCoordinator
+import uk.co.mfrost.inkfold.model.Notebook
+import uk.co.mfrost.inkfold.model.snapshot
+import uk.co.mfrost.inkfold.storage.DocumentRepository
+import uk.co.mfrost.inkfold.storage.DocumentSummary
+import uk.co.mfrost.inkfold.sync.DriveSync
+import uk.co.mfrost.inkfold.sync.SyncCoordinator
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

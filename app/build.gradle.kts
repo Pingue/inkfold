@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "app.inkfold"
+    namespace = "uk.co.mfrost.inkfold"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.inkfold"
+        applicationId = "uk.co.mfrost.inkfold"
         minSdk = 26
         targetSdk = 36
         // CI overrides these via -PversionCodeOverride/-PversionNameOverride so

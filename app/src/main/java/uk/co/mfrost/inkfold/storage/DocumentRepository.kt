@@ -1,12 +1,12 @@
-package app.inkfold.storage
+package uk.co.mfrost.inkfold.storage
 
 import android.content.Context
-import app.inkfold.drawing.SvgPage
-import app.inkfold.model.DocumentManifest
-import app.inkfold.model.Notebook
-import app.inkfold.model.Page
-import app.inkfold.model.PageRef
-import app.inkfold.model.PageType
+import uk.co.mfrost.inkfold.drawing.SvgPage
+import uk.co.mfrost.inkfold.model.DocumentManifest
+import uk.co.mfrost.inkfold.model.Notebook
+import uk.co.mfrost.inkfold.model.Page
+import uk.co.mfrost.inkfold.model.PageRef
+import uk.co.mfrost.inkfold.model.PageType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json

@@ -1,4 +1,4 @@
-package app.inkfold.sync
+package uk.co.mfrost.inkfold.sync
 
 import android.content.Context
 import androidx.work.BackoffPolicy

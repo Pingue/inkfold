@@ -1,10 +1,10 @@
-package app.inkfold.storage
+package uk.co.mfrost.inkfold.storage
 
 import android.content.Context
 import android.graphics.Color
-import app.inkfold.drawing.EraserMode
-import app.inkfold.drawing.ToolSettings
-import app.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.drawing.EraserMode
+import uk.co.mfrost.inkfold.drawing.ToolSettings
+import uk.co.mfrost.inkfold.model.ToolType
 
 /** Persists the editor's tool selection and pen/touch mode across sessions. */
 class Prefs(context: Context) {

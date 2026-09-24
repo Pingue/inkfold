@@ -1,4 +1,4 @@
-package app.inkfold.sync
+package uk.co.mfrost.inkfold.sync
 
 import android.accounts.Account
 import android.accounts.AccountManager
@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.edit
-import app.inkfold.storage.DocumentRepository
+import uk.co.mfrost.inkfold.storage.DocumentRepository
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity

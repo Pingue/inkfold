@@ -1,4 +1,4 @@
-package app.inkfold.ui
+package uk.co.mfrost.inkfold.ui
 
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -80,15 +80,15 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 import androidx.compose.ui.viewinterop.AndroidView
-import app.inkfold.drawing.DrawingView
-import app.inkfold.drawing.EraserMode
-import app.inkfold.drawing.ToolSettings
-import app.inkfold.export.Exporter
-import app.inkfold.model.Page
-import app.inkfold.model.PageOrientation
-import app.inkfold.model.PageType
-import app.inkfold.model.ToolType
-import app.inkfold.storage.Prefs
+import uk.co.mfrost.inkfold.drawing.DrawingView
+import uk.co.mfrost.inkfold.drawing.EraserMode
+import uk.co.mfrost.inkfold.drawing.ToolSettings
+import uk.co.mfrost.inkfold.export.Exporter
+import uk.co.mfrost.inkfold.model.Page
+import uk.co.mfrost.inkfold.model.PageOrientation
+import uk.co.mfrost.inkfold.model.PageType
+import uk.co.mfrost.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.storage.Prefs
 import kotlinx.coroutines.launch
 
 private val PRESET_COLORS = listOf(

@@ -1,9 +1,9 @@
-package app.inkfold.drawing
+package uk.co.mfrost.inkfold.drawing
 
-import app.inkfold.model.Page
-import app.inkfold.model.Stroke
-import app.inkfold.model.StrokePoint
-import app.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.model.Page
+import uk.co.mfrost.inkfold.model.Stroke
+import uk.co.mfrost.inkfold.model.StrokePoint
+import uk.co.mfrost.inkfold.model.ToolType
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.util.Locale

@@ -1,11 +1,11 @@
-package app.inkfold.drawing
+package uk.co.mfrost.inkfold.drawing
 
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import app.inkfold.model.Stroke
-import app.inkfold.model.StrokePoint
-import app.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.model.Stroke
+import uk.co.mfrost.inkfold.model.StrokePoint
+import uk.co.mfrost.inkfold.model.ToolType
 
 /**
  * Single source of truth for how a [Stroke] is painted, shared by the live

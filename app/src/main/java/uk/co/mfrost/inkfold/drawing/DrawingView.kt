@@ -1,4 +1,4 @@
-package app.inkfold.drawing
+package uk.co.mfrost.inkfold.drawing
 
 import android.content.Context
 import android.graphics.Canvas
@@ -12,13 +12,13 @@ import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.OverScroller
-import app.inkfold.model.Notebook
-import app.inkfold.model.Page
-import app.inkfold.model.PageOrientation
-import app.inkfold.model.PageType
-import app.inkfold.model.Stroke
-import app.inkfold.model.StrokePoint
-import app.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.model.Notebook
+import uk.co.mfrost.inkfold.model.Page
+import uk.co.mfrost.inkfold.model.PageOrientation
+import uk.co.mfrost.inkfold.model.PageType
+import uk.co.mfrost.inkfold.model.Stroke
+import uk.co.mfrost.inkfold.model.StrokePoint
+import uk.co.mfrost.inkfold.model.ToolType
 import kotlin.math.abs
 import kotlin.math.hypot
 
@@ -221,7 +221,7 @@ class DrawingView(context: Context) : View(context) {
         invalidate()
     }
 
-    fun setFocusedPageOrientation(orientation: app.inkfold.model.PageOrientation) {
+    fun setFocusedPageOrientation(orientation: uk.co.mfrost.inkfold.model.PageOrientation) {
         val i = focusedPageIndex()
         notebook.pages.getOrNull(i)?.orientation = orientation
         recomputeLayout()

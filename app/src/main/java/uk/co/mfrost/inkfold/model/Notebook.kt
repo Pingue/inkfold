@@ -1,4 +1,4 @@
-package app.inkfold.model
+package uk.co.mfrost.inkfold.model
 
 import kotlinx.serialization.Serializable
 import java.util.UUID

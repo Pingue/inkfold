@@ -69,7 +69,7 @@ configured) signed release builds from CI can also be sideloaded directly.
   rendering share one code path (`drawing/StrokeRenderer.kt`).
 
 ```
-app/src/main/java/app/inkfold/
+app/src/main/java/uk/co/mfrost/inkfold/
 ├── MainActivity.kt            # Compose host + sign-in launcher
 ├── model/Notebook.kt          # Notebook / Page / Stroke + manifest model
 ├── drawing/
@@ -153,7 +153,7 @@ signing certificate.
    and add your Google account as a **test user**. Add the
    `.../auth/drive.file` scope.
 3. Create an **OAuth client ID → Android**:
-   - **Package name:** `app.inkfold`
+   - **Package name:** `uk.co.mfrost.inkfold`
    - **SHA-1:** the fingerprint of the keystore the APK is signed with. For the
      debug build:
      ```bash
