@@ -1,4 +1,4 @@
-package app.pennotes.sync
+package uk.co.mfrost.inkfold.sync
 
 import android.accounts.Account
 import android.accounts.AccountManager
@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.edit
-import app.pennotes.storage.DocumentRepository
+import uk.co.mfrost.inkfold.storage.DocumentRepository
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
@@ -38,9 +38,9 @@ data class SyncResult(
 )
 
 /**
- * Two-way sync between the local document store and a "PenNotes" folder in the
+ * Two-way sync between the local document store and an "Inkfold" folder in the
  * user's Google Drive. Each document is a *sub-folder* (containing the
- * `index.pennotes` manifest and one SVG per page), tagged with the document id
+ * `index.inkfold` manifest and one SVG per page), tagged with the document id
  * and modification time in Drive appProperties. Conflicts resolve last-write-
  * wins per document; the app is fully usable offline.
  *
@@ -355,7 +355,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private fun mimeFor(name: String): String = when {
         name.endsWith(".svg") -> "image/svg+xml"
-        name.endsWith(".pennotes") || name.endsWith(".json") -> "application/json"
+        name.endsWith(".inkfold") || name.endsWith(".json") -> "application/json"
         name.endsWith(".md") -> "text/markdown"
         else -> "text/plain"
     }
@@ -372,7 +372,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         private const val DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
         private const val DRIVE_API = "https://www.googleapis.com/drive/v3"
         private const val UPLOAD_API = "https://www.googleapis.com/upload/drive/v3"
-        private const val ROOT_NAME = "PenNotes"
+        private const val ROOT_NAME = "Inkfold"
         private const val FOLDER_MIME = "application/vnd.google-apps.folder"
         private const val GOOGLE_ACCOUNT_TYPE = "com.google"
         private const val PREFS_NAME = "drive_sync"

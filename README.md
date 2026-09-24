@@ -1,4 +1,4 @@
-# PenNotes
+# Inkfold
 
 A pen-first note-taking app for Android phones and tablets. Write with a stylus
 or your finger, organise notes into multi-page files, and sync everything to a
@@ -24,14 +24,14 @@ configured) signed release builds from CI can also be sideloaded directly.
   **palm rejection**: finger input is ignored while the stylus is hovering or
   was just used, and palm-sized contacts are dropped.
 - **Documents & pages** — create, open, rename and delete documents. Each
-  document is a folder of pages described by an `index.pennotes` manifest;
+  document is a folder of pages described by an `index.inkfold` manifest;
   pages are independently **portrait or landscape**.
 - **Mixed page types** — graphical (handwriting) pages saved as self-describing
   SVG, and **Markdown text pages** (`.md`), rendered inline in the same
   continuous scroll. Tap a Markdown page to edit it (`#` headings, `**bold**`,
   `*italic*`, `- bullets`, `` `code` ``).
 - **Undo / redo** for strokes and erases.
-- **Google Drive sync** — two-way sync to a `PenNotes` folder in your Drive,
+- **Google Drive sync** — two-way sync to an `Inkfold` folder in your Drive,
   backed by a local cache so the app works fully offline. Syncs automatically
   every few minutes while the app is open (and on document close), plus a
   periodic background sync via WorkManager while it's closed, plus on demand.
@@ -50,10 +50,10 @@ configured) signed release builds from CI can also be sideloaded directly.
 - **Document format.** A document is a *folder*, not a single file:
   ```
   documents/<id>/
-    index.pennotes     # JSON manifest: ordered list of pages, each with a type
-    <pageId>.svg       # one self-describing SVG per page
+    index.inkfold      # JSON manifest: ordered list of pages, each with a type
+    <pageId>.svg        # one self-describing SVG per page
   ```
-  The `index.pennotes` manifest (kotlinx.serialization) lists pages in render
+  The `index.inkfold` manifest (kotlinx.serialization) lists pages in render
   order; each entry has a `type`, either `svg` (handwriting) or `markdown`
   (text). Each page SVG renders in any viewer **and** embeds the exact
   stroke data (pressure, tool, colour) in `<metadata>`, so the app reloads it
@@ -63,13 +63,13 @@ configured) signed release builds from CI can also be sideloaded directly.
   `drive.file` scope (a system account picker chooses the Google account, then
   a consent screen requests Drive access if it isn't already granted), and the
   Drive v3 REST API over OkHttp for sync itself. Each document is a sub-folder
-  of a `PenNotes` Drive folder; the app lists those sub-folders as documents.
+  of an `Inkfold` Drive folder; the app lists those sub-folders as documents.
   The app can only see files it creates.
 - Export uses Android's `PdfDocument` and `Bitmap` APIs. On-screen and exported
   rendering share one code path (`drawing/StrokeRenderer.kt`).
 
 ```
-app/src/main/java/app/pennotes/
+app/src/main/java/uk/co/mfrost/inkfold/
 ├── MainActivity.kt            # Compose host + sign-in launcher
 ├── model/Notebook.kt          # Notebook / Page / Stroke + manifest model
 ├── drawing/
@@ -110,10 +110,10 @@ manual dispatch). It:
 1. sets up JDK 17 and the Android SDK,
 2. builds the debug APK (`assembleDebug`),
 3. runs Android Lint (`lintDebug`),
-4. uploads the APK as a build artifact (`pennotes-debug-apk`),
+4. uploads the APK as a build artifact (`inkfold-debug-apk`),
 5. when the release keystore secrets are configured (see below), also builds
-   a signed release APK (`pennotes-release-apk`) and a signed release AAB
-   (`pennotes-release-aab`) — the AAB is the format the Play Console requires
+   a signed release APK (`inkfold-release-apk`) and a signed release AAB
+   (`inkfold-release-aab`) — the AAB is the format the Play Console requires
    for a Play Store upload.
 
 Download the APK from the **Artifacts** section of a completed run and sideload
@@ -153,7 +153,7 @@ signing certificate.
    and add your Google account as a **test user**. Add the
    `.../auth/drive.file` scope.
 3. Create an **OAuth client ID → Android**:
-   - **Package name:** `app.pennotes`
+   - **Package name:** `uk.co.mfrost.inkfold`
    - **SHA-1:** the fingerprint of the keystore the APK is signed with. For the
      debug build:
      ```bash
@@ -179,27 +179,27 @@ SHA-1 you can't register. To make Drive sync work from a CI build, sign a
 
 1. Generate a keystore locally (keep it safe; don't commit it):
    ```bash
-   keytool -genkeypair -v -keystore pennotes-release.jks \
-     -alias pennotes -keyalg RSA -keysize 2048 -validity 10000
+   keytool -genkeypair -v -keystore inkfold-release.jks \
+     -alias inkfold -keyalg RSA -keysize 2048 -validity 10000
    ```
    Choose a store password and key password (they may be the same).
 2. Read its SHA-1 (register this in the OAuth Android client, step 3 above):
    ```bash
-   keytool -list -v -keystore pennotes-release.jks -alias pennotes
+   keytool -list -v -keystore inkfold-release.jks -alias inkfold
    ```
 3. Base64-encode the keystore for the secret:
    ```bash
-   base64 -w0 pennotes-release.jks      # Linux
-   base64 -i pennotes-release.jks       # macOS
+   base64 -w0 inkfold-release.jks      # Linux
+   base64 -i inkfold-release.jks       # macOS
    ```
 4. In the repo: **Settings → Secrets and variables → Actions → New repository
    secret**, add:
    - `KEYSTORE_BASE64` — the base64 string from step 3
    - `KEYSTORE_PASSWORD` — the store password
-   - `KEY_ALIAS` — `pennotes`
+   - `KEY_ALIAS` — `inkfold`
    - `KEY_PASSWORD` — the key password
 5. Re-run the build. When the secret is present, CI also produces a
-   **`pennotes-release-apk`** artifact, signed with your keystore. Install that
+   **`inkfold-release-apk`** artifact, signed with your keystore. Install that
    one. (Uninstall any earlier debug build first — different signature.)
 
 The same keystore SHA-1 also works for a local `./gradlew installDebug` only if
