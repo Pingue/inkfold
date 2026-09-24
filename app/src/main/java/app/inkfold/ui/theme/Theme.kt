@@ -1,4 +1,4 @@
-package app.pennotes.ui.theme
+package app.inkfold.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -22,7 +22,7 @@ private val DarkColors = darkColorScheme(
 )
 
 @Composable
-fun PenNotesTheme(
+fun InkfoldTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

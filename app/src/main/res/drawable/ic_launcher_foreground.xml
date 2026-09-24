@@ -3,16 +3,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A simple pen nib drawn on the adaptive-icon foreground layer. -->
-    <group android:scaleX="1.6" android:scaleY="1.6" android:pivotX="54" android:pivotY="54">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M30,72 L36,66 L48,78 L42,84 L30,84 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M39,63 L63,39 L75,51 L51,75 Z" />
-        <path
-            android:fillColor="#FFE08A"
-            android:pathData="M66,36 L72,30 A6,6 0 0 1 84,42 L78,48 Z" />
-    </group>
+    <!-- "I" for Inkfold: a pen nib (with slit and vent hole) forms the top of
+         the letterform, a straight stroke is its stem, and an ink blot pools
+         at the base as its serif. Cutouts use the background colour so they
+         read as ink against the flat fill. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,16 L68,34 L40,34 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,34 L60,34 L60,76 L48,76 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,83 C32,73.5 41.9,66 54,66 C66.1,66 76,73.5 76,83 C76,92.5 66.1,100 54,100 C41.9,100 32,92.5 32,83 Z" />
+    <path
+        android:fillColor="#1E3A5F"
+        android:pathData="M54,19 L55.2,32 L52.8,32 Z" />
+    <path
+        android:fillColor="#1E3A5F"
+        android:pathData="M51,28 C51,26.35 52.35,25 54,25 C55.65,25 57,26.35 57,28 C57,29.65 55.65,31 54,31 C52.35,31 51,29.65 51,28 Z" />
+    <path
+        android:fillColor="#1E3A5F"
+        android:pathData="M42,77 C42,74.79 43.79,73 46,73 C48.21,73 50,74.79 50,77 C50,79.21 48.21,81 46,81 C43.79,81 42,79.21 42,77 Z" />
 </vector>

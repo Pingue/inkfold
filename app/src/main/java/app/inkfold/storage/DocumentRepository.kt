@@ -1,12 +1,12 @@
-package app.pennotes.storage
+package app.inkfold.storage
 
 import android.content.Context
-import app.pennotes.drawing.SvgPage
-import app.pennotes.model.DocumentManifest
-import app.pennotes.model.Notebook
-import app.pennotes.model.Page
-import app.pennotes.model.PageRef
-import app.pennotes.model.PageType
+import app.inkfold.drawing.SvgPage
+import app.inkfold.model.DocumentManifest
+import app.inkfold.model.Notebook
+import app.inkfold.model.Page
+import app.inkfold.model.PageRef
+import app.inkfold.model.PageType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -27,7 +27,7 @@ data class DocumentSummary(
  *
  * ```
  * documents/<id>/
- *   index.pennotes      # JSON manifest: ordered list of pages
+ *   index.inkfold      # JSON manifest: ordered list of pages
  *   <pageId>.svg        # one self-describing SVG per page
  * ```
  */
@@ -156,6 +156,6 @@ class DocumentRepository(context: Context) {
     }
 
     companion object {
-        const val MANIFEST = "index.pennotes"
+        const val MANIFEST = "index.inkfold"
     }
 }

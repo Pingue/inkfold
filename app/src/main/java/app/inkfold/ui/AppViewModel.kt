@@ -1,4 +1,4 @@
-package app.pennotes.ui
+package app.inkfold.ui
 
 import android.app.Application
 import androidx.compose.runtime.getValue
@@ -7,12 +7,12 @@ import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import app.pennotes.model.Notebook
-import app.pennotes.model.snapshot
-import app.pennotes.storage.DocumentRepository
-import app.pennotes.storage.DocumentSummary
-import app.pennotes.sync.DriveSync
-import app.pennotes.sync.SyncCoordinator
+import app.inkfold.model.Notebook
+import app.inkfold.model.snapshot
+import app.inkfold.storage.DocumentRepository
+import app.inkfold.storage.DocumentSummary
+import app.inkfold.sync.DriveSync
+import app.inkfold.sync.SyncCoordinator
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

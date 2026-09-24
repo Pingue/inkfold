@@ -1,9 +1,9 @@
 # kotlinx.serialization keeps generated serializers via @Serializable.
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
--keepclassmembers class app.pennotes.model.** {
+-keepclassmembers class app.inkfold.model.** {
     *** Companion;
 }
--keepclasseswithmembers class app.pennotes.model.** {
+-keepclasseswithmembers class app.inkfold.model.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

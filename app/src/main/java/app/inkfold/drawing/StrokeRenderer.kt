@@ -1,11 +1,11 @@
-package app.pennotes.drawing
+package app.inkfold.drawing
 
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import app.pennotes.model.Stroke
-import app.pennotes.model.StrokePoint
-import app.pennotes.model.ToolType
+import app.inkfold.model.Stroke
+import app.inkfold.model.StrokePoint
+import app.inkfold.model.ToolType
 
 /**
  * Single source of truth for how a [Stroke] is painted, shared by the live

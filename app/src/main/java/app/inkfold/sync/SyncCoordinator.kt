@@ -1,4 +1,4 @@
-package app.pennotes.sync
+package app.inkfold.sync
 
 import android.content.Context
 import androidx.work.BackoffPolicy

@@ -1,4 +1,4 @@
-package app.pennotes.ui
+package app.inkfold.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.pennotes.storage.DocumentSummary
+import app.inkfold.storage.DocumentSummary
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -67,7 +67,7 @@ fun NotebookListScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("PenNotes") },
+                title = { Text("Inkfold") },
                 actions = {
                     IconButton(onClick = { vm.sync() }, enabled = !vm.syncing) {
                         Icon(

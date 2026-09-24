@@ -1,9 +1,9 @@
-package app.pennotes.drawing
+package app.inkfold.drawing
 
-import app.pennotes.model.Page
-import app.pennotes.model.Stroke
-import app.pennotes.model.StrokePoint
-import app.pennotes.model.ToolType
+import app.inkfold.model.Page
+import app.inkfold.model.Stroke
+import app.inkfold.model.StrokePoint
+import app.inkfold.model.ToolType
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.util.Locale
@@ -22,9 +22,9 @@ object SvgPage {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val strokeListSerializer = ListSerializer(Stroke.serializer())
 
-    private const val NS = "https://pennotes.app/ns"
-    private const val OPEN = "<pennotes:strokes><![CDATA["
-    private const val CLOSE = "]]></pennotes:strokes>"
+    private const val NS = "https://inkfold.app/ns"
+    private const val OPEN = "<inkfold:strokes><![CDATA["
+    private const val CLOSE = "]]></inkfold:strokes>"
 
     fun toSvg(page: Page): String {
         val w = page.width
@@ -32,7 +32,7 @@ object SvgPage {
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         sb.append(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:pennotes=\"$NS\" " +
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkfold=\"$NS\" " +
                 "width=\"${num(w)}\" height=\"${num(h)}\" viewBox=\"0 0 ${num(w)} ${num(h)}\">\n"
         )
         sb.append("<rect x=\"0\" y=\"0\" width=\"${num(w)}\" height=\"${num(h)}\" fill=\"#ffffff\"/>\n")

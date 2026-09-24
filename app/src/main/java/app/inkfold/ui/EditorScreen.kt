@@ -1,4 +1,4 @@
-package app.pennotes.ui
+package app.inkfold.ui
 
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -80,15 +80,15 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 import androidx.compose.ui.viewinterop.AndroidView
-import app.pennotes.drawing.DrawingView
-import app.pennotes.drawing.EraserMode
-import app.pennotes.drawing.ToolSettings
-import app.pennotes.export.Exporter
-import app.pennotes.model.Page
-import app.pennotes.model.PageOrientation
-import app.pennotes.model.PageType
-import app.pennotes.model.ToolType
-import app.pennotes.storage.Prefs
+import app.inkfold.drawing.DrawingView
+import app.inkfold.drawing.EraserMode
+import app.inkfold.drawing.ToolSettings
+import app.inkfold.export.Exporter
+import app.inkfold.model.Page
+import app.inkfold.model.PageOrientation
+import app.inkfold.model.PageType
+import app.inkfold.model.ToolType
+import app.inkfold.storage.Prefs
 import kotlinx.coroutines.launch
 
 private val PRESET_COLORS = listOf(

@@ -1,4 +1,4 @@
-package app.pennotes.export
+package app.inkfold.export
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -9,11 +9,11 @@ import android.graphics.Path
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
-import app.pennotes.drawing.MarkdownRenderer
-import app.pennotes.drawing.StrokeRenderer
-import app.pennotes.model.Notebook
-import app.pennotes.model.Page
-import app.pennotes.model.PageType
+import app.inkfold.drawing.MarkdownRenderer
+import app.inkfold.drawing.StrokeRenderer
+import app.inkfold.model.Notebook
+import app.inkfold.model.Page
+import app.inkfold.model.PageType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File

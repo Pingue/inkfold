@@ -1,4 +1,4 @@
-package app.pennotes.drawing
+package app.inkfold.drawing
 
 import android.graphics.Canvas
 import android.graphics.Color
@@ -12,7 +12,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
-import app.pennotes.model.Page
+import app.inkfold.model.Page
 
 /**
  * Renders a Markdown page onto a page-coordinate [Canvas], shared by the editor
