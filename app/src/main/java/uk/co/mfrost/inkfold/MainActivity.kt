@@ -56,7 +56,7 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
         pendingAccount = null
         when {
             account == null -> Unit
-            result.resultCode != Activity.RESULT_OK -> vm.onDriveAuthorizationFailed(cancelled = true)
+            result.resultCode != Activity.RESULT_OK -> vm.onDriveConsentDenied()
             vm.driveSync.finishAuthorization(account, result.data) -> vm.onDriveAuthorized()
             else -> vm.onDriveAuthorizationFailed()
         }

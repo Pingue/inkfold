@@ -136,10 +136,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         sync()
     }
 
-    /** Called when account selection or authorization fails or is cancelled. */
+    /** Called when account selection fails or is cancelled (e.g. the picker is dismissed). */
     fun onDriveAuthorizationFailed(error: Throwable? = null, cancelled: Boolean = false) {
         refreshAccount()
         if (!cancelled) statusMessage = driveAuthorizationErrorMessage(error)
+    }
+
+    /**
+     * Called when the consent screen (shown for a specific, already-chosen account)
+     * closes without granting access. Unlike dismissing the account picker, this is
+     * almost never a deliberate user cancellation — Play Services gives no reason
+     * code here, but by far the most common cause is a DEVELOPER_ERROR: the app's
+     * signing certificate isn't registered against an OAuth client for the current
+     * package name, so the consent screen fails immediately and closes itself.
+     */
+    fun onDriveConsentDenied() {
+        refreshAccount()
+        statusMessage = "Drive sign-in didn't complete. If the consent screen flashed " +
+            "and closed on its own, this app's signing certificate is likely not " +
+            "registered in a Google Cloud OAuth client for its current package name " +
+            "(see \"Troubleshooting sign-in\" in the README)."
     }
 
     private fun driveAuthorizationErrorMessage(error: Throwable?): String = when {
