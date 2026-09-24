@@ -3,15 +3,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Inkfold mark: a page with its top-right corner folded down, and a
-         drop of ink pooling on the page beneath the fold. -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M24,20 L62,20 L84,42 L84,90 L24,90 Z" />
-    <path
-        android:fillColor="#E8B24D"
-        android:pathData="M62,20 L84,20 L84,42 Z" />
-    <path
-        android:fillColor="#E8B24D"
-        android:pathData="M44,50 C38.5,57 35,63 35,68 C35,73.2 39.2,77.5 44,77.5 C48.8,77.5 53,73.2 53,68 C53,63 49.5,57 44,50 Z" />
+    <!-- Empty: the launcher icon is fully rendered in the background layer
+         (@drawable/ic_launcher_background), so this layer stays transparent
+         rather than adding a second element bound to the smaller safe zone. -->
 </vector>
