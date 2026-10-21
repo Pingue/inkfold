@@ -171,6 +171,10 @@ signing certificate.
 No API keys or secrets are stored in the repo — Android OAuth clients are
 identified by package name + signing certificate, not a secret.
 
+If a sync pass seems stuck or fails, open the overflow menu and choose
+**Sync log** to see what the last few sync attempts actually did (each pass
+now also times out after 2 minutes instead of hanging indefinitely).
+
 ### Using Drive sync with the CI-built APK (fixed signing keystore)
 
 The debug APK from CI is signed with the runner's throwaway keystore, whose
