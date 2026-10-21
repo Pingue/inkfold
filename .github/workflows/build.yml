@@ -53,7 +53,7 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           # The action's v3 default package list still requests the legacy
           # "tools" package, which Google has removed from the SDK repository
