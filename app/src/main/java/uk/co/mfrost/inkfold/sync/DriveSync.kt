@@ -12,19 +12,27 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -54,7 +62,12 @@ data class SyncResult(
  */
 class DriveSync(private val context: Context, private val repo: DocumentRepository) {
 
-    private val http = OkHttpClient()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(HTTP_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(HTTP_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .writeTimeout(HTTP_WRITE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .callTimeout(HTTP_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .build()
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
     private val log = SyncLog(context)
 
@@ -131,7 +144,8 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private suspend fun runSync(account: Account): SyncResult {
         return try {
-            val token = GoogleAuthUtil.getToken(context, account, "oauth2:$DRIVE_FILE_SCOPE")
+            val token = withTimeoutOrNull(AUTH_TIMEOUT_MS) { getAuthToken(account) }
+                ?: throw IOException("Drive authentication timed out after ${AUTH_TIMEOUT_MS / 1000}s")
             log.add("Got auth token")
             val rootId = ensureRootFolder(token)
             val remote = listRemoteDocs(rootId, token).associateBy { it.docId }
@@ -151,6 +165,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
             val survivors = HashMap<String, Long>()
 
             for (id in locals.keys + remote.keys) {
+                currentCoroutineContext().ensureActive()
                 val local = locals[id]
                 val rem = remote[id]
                 val base = baseline[id]
@@ -177,6 +192,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                         // Missing remotely. If it was synced before and hasn't been
                         // touched locally since, it was deleted on the other device.
                         if (base != null && local.updatedAt <= base) {
+                            currentCoroutineContext().ensureActive()
                             log.add("Deleting local copy of '${local.title}' ($id)")
                             repo.delete(id)
                             deleted++
@@ -205,6 +221,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                 }
             }
 
+            currentCoroutineContext().ensureActive()
             writeBaseline(survivors)
             SyncResult(
                 uploaded = uploaded,
@@ -212,6 +229,8 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                 deleted = deleted,
                 downloadedIds = downloadedIds,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val message = e.message ?: e.javaClass.simpleName
             log.add("Sync failed: ${e.javaClass.simpleName}: $message")
@@ -223,7 +242,20 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private data class RemoteDoc(val folderId: String, val docId: String, val updatedAt: Long)
 
-    private fun ensureRootFolder(token: String): String {
+    private suspend fun getAuthToken(account: Account): String = suspendCancellableCoroutine { continuation ->
+        val thread = Thread({
+            try {
+                val token = GoogleAuthUtil.getToken(context, account, "oauth2:$DRIVE_FILE_SCOPE")
+                if (continuation.isActive) continuation.resume(token)
+            } catch (e: Exception) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+        }, "inkfold-drive-auth").apply { isDaemon = true }
+        thread.start()
+        continuation.invokeOnCancellation { thread.interrupt() }
+    }
+
+    private suspend fun ensureRootFolder(token: String): String {
         val q = "mimeType='$FOLDER_MIME' and name='$ROOT_NAME' and trashed=false"
         val body = get("$DRIVE_API/files?q=${enc(q)}&fields=files(id)&spaces=drive", token)
         JSONObject(body).optJSONArray("files")?.let { if (it.length() > 0) return it.getJSONObject(0).getString("id") }
@@ -232,7 +264,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         return JSONObject(created).getString("id")
     }
 
-    private fun listRemoteDocs(rootId: String, token: String): List<RemoteDoc> {
+    private suspend fun listRemoteDocs(rootId: String, token: String): List<RemoteDoc> {
         val q = "'$rootId' in parents and mimeType='$FOLDER_MIME' and trashed=false"
         val body = get("$DRIVE_API/files?q=${enc(q)}&fields=files(id,appProperties)&spaces=drive", token)
         val arr = JSONObject(body).optJSONArray("files") ?: return emptyList()
@@ -248,7 +280,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         return out
     }
 
-    private fun createFolder(parentId: String, title: String, docId: String, updatedAt: Long, token: String): String {
+    private suspend fun createFolder(parentId: String, title: String, docId: String, updatedAt: Long, token: String): String {
         val meta = JSONObject()
             .put("name", title)
             .put("mimeType", FOLDER_MIME)
@@ -258,14 +290,14 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         return JSONObject(created).getString("id")
     }
 
-    private fun updateFolderMeta(folderId: String, title: String, updatedAt: Long, token: String) {
+    private suspend fun updateFolderMeta(folderId: String, title: String, updatedAt: Long, token: String) {
         val meta = JSONObject()
             .put("name", title)
             .put("appProperties", JSONObject().put("updatedAt", updatedAt.toString()))
         patch("$DRIVE_API/files/$folderId?fields=id", token, meta.toString().toRequestBody(JSON_MEDIA))
     }
 
-    private fun listFilesInFolder(folderId: String, token: String): Map<String, String> {
+    private suspend fun listFilesInFolder(folderId: String, token: String): Map<String, String> {
         val q = "'$folderId' in parents and mimeType!='$FOLDER_MIME' and trashed=false"
         val body = get("$DRIVE_API/files?q=${enc(q)}&fields=files(id,name)&spaces=drive", token)
         val arr = JSONObject(body).optJSONArray("files") ?: return emptyMap()
@@ -277,12 +309,13 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         return out
     }
 
-    private fun pushFiles(docId: String, folderId: String, token: String) {
+    private suspend fun pushFiles(docId: String, folderId: String, token: String) {
         val remoteFiles = listFilesInFolder(folderId, token)
         val localFiles = repo.filesFor(docId)
         val localNames = localFiles.map { it.name }.toSet()
 
         for (file in localFiles) {
+            currentCoroutineContext().ensureActive()
             val mime = mimeFor(file.name)
             val existing = remoteFiles[file.name]
             if (existing != null) {
@@ -293,22 +326,28 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         }
         // Remove remote files for pages deleted locally.
         for ((name, id) in remoteFiles) {
+            currentCoroutineContext().ensureActive()
             if (name !in localNames) delete("$DRIVE_API/files/$id", token)
         }
     }
 
-    private fun pullFiles(docId: String, folderId: String, token: String) {
+    private suspend fun pullFiles(docId: String, folderId: String, token: String) {
         val remoteFiles = listFilesInFolder(folderId, token)
         for ((name, id) in remoteFiles) {
+            currentCoroutineContext().ensureActive()
             val content = get("$DRIVE_API/files/$id?alt=media", token)
+            currentCoroutineContext().ensureActive()
             repo.writeFile(docId, name, content)
         }
         // Remove local files no longer present remotely.
         val remoteNames = remoteFiles.keys
-        repo.filesFor(docId).forEach { if (it.name !in remoteNames) it.delete() }
+        for (file in repo.filesFor(docId)) {
+            currentCoroutineContext().ensureActive()
+            if (file.name !in remoteNames) file.delete()
+        }
     }
 
-    private fun createFileInFolder(folderId: String, name: String, content: String, mime: String, token: String) {
+    private suspend fun createFileInFolder(folderId: String, name: String, content: String, mime: String, token: String) {
         val meta = JSONObject().put("name", name).put("parents", JSONArray().put(folderId))
         val body = MultipartBody.Builder()
             .setType("multipart/related".toMediaType())
@@ -320,47 +359,76 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
             .header("Authorization", "Bearer $token")
             .post(body)
             .build()
-        http.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) error("Drive upload failed: ${resp.code}")
-        }
+        exec(request, "Drive upload failed")
     }
 
     // ---- Low-level HTTP ----------------------------------------------------
 
-    private fun uploadMedia(url: String, method: String, token: String, content: String, mime: String) {
+    private suspend fun uploadMedia(url: String, method: String, token: String, content: String, mime: String) {
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $token")
             .method(method, content.toRequestBody(mime.toMediaType()))
             .build()
-        http.newCall(request).execute().use { resp ->
-            if (!resp.isSuccessful) error("Drive upload failed: ${resp.code}")
-        }
+        exec(request, "Drive upload failed")
     }
 
-    private fun get(url: String, token: String): String =
+    private suspend fun get(url: String, token: String): String =
         exec(Request.Builder().url(url).header("Authorization", "Bearer $token").get().build())
 
-    private fun post(url: String, token: String, body: okhttp3.RequestBody): String =
+    private suspend fun post(url: String, token: String, body: okhttp3.RequestBody): String =
         exec(Request.Builder().url(url).header("Authorization", "Bearer $token").post(body).build())
 
-    private fun patch(url: String, token: String, body: okhttp3.RequestBody): String =
+    private suspend fun patch(url: String, token: String, body: okhttp3.RequestBody): String =
         exec(Request.Builder().url(url).header("Authorization", "Bearer $token").patch(body).build())
 
-    private fun delete(url: String, token: String) {
+    private suspend fun delete(url: String, token: String) {
         http.newCall(Request.Builder().url(url).header("Authorization", "Bearer $token").delete().build())
-            .execute().use { /* best-effort */ }
+            .awaitCompletion()
     }
 
-    private fun exec(request: Request): String {
-        http.newCall(request).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) error("Drive request failed: ${resp.code}")
-            return text
+    private suspend fun Call.awaitCompletion(): Unit = suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.close()
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+        })
+    }
+
+    private suspend fun exec(request: Request, failurePrefix: String? = "Drive request failed"): String =
+        suspendCancellableCoroutine { continuation ->
+            val call = http.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val result = runCatching {
+                        response.use {
+                            val body = it.body?.string().orEmpty()
+                            if (failurePrefix != null && !it.isSuccessful) {
+                                throw IOException("$failurePrefix: ${it.code}")
+                            }
+                            body
+                        }
+                    }
+                    result.fold(
+                        onSuccess = { if (continuation.isActive) continuation.resume(it) },
+                        onFailure = { if (continuation.isActive) continuation.resumeWithException(it) },
+                    )
+                }
+            })
         }
-    }
 
-    private fun deleteRemoteFolder(folderId: String, token: String) {
+    private suspend fun deleteRemoteFolder(folderId: String, token: String) {
         delete("$DRIVE_API/files/$folderId", token)
     }
 
@@ -407,6 +475,11 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         private const val PREFS_NAME = "drive_sync"
         private const val KEY_ACCOUNT_NAME = "account_name"
         private val JSON_MEDIA = "application/json; charset=UTF-8".toMediaType()
+        private const val AUTH_TIMEOUT_MS = 30_000L
+        private const val HTTP_CONNECT_TIMEOUT_MS = 15_000L
+        private const val HTTP_READ_TIMEOUT_MS = 30_000L
+        private const val HTTP_WRITE_TIMEOUT_MS = 30_000L
+        private const val HTTP_CALL_TIMEOUT_MS = 30_000L
 
         /** Upper bound on a single pass so a stuck network/auth call fails loudly instead of hanging forever. */
         private const val SYNC_TIMEOUT_MS = 2 * 60 * 1000L

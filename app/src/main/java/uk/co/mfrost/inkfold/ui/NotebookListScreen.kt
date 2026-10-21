@@ -64,12 +64,17 @@ fun NotebookListScreen(
     var showCreate by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var showSyncLog by remember { mutableStateOf(false) }
+    var syncLogText by remember { mutableStateOf("") }
 
     LaunchedEffect(vm.statusMessage) {
         vm.statusMessage?.let {
             scope.launch { snackbar.showSnackbar(it) }
             vm.statusMessage = null
         }
+    }
+
+    LaunchedEffect(vm.syncing, showSyncLog) {
+        if (showSyncLog && !vm.syncing) syncLogText = vm.syncLogText()
     }
 
     Scaffold(
@@ -104,7 +109,9 @@ fun NotebookListScreen(
                                 })
                             }
                             DropdownMenuItem(text = { Text("Sync log") }, onClick = {
-                                menuOpen = false; showSyncLog = true
+                                menuOpen = false
+                                syncLogText = vm.syncLogText()
+                                showSyncLog = true
                             })
                         }
                     },
@@ -155,8 +162,11 @@ fun NotebookListScreen(
 
     if (showSyncLog) {
         SyncLogDialog(
-            text = vm.syncLogText(),
-            onClear = { vm.clearSyncLog() },
+            text = syncLogText,
+            onClear = {
+                vm.clearSyncLog()
+                syncLogText = vm.syncLogText()
+            },
             onDismiss = { showSyncLog = false },
         )
     }
