@@ -128,6 +128,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refreshAccount()
     }
 
+    /** Recent sync history (start/finish/error per pass), for the "Sync log" view. */
+    fun syncLogText(): String = driveSync.logText()
+
+    fun clearSyncLog() = driveSync.clearLog()
+
     /** Called once [DriveSync.authorize] (and any consent screen it triggered) succeeds. */
     fun onDriveAuthorized() {
         refreshAccount()

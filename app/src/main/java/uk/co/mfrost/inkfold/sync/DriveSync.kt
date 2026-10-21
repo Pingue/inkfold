@@ -15,6 +15,7 @@ import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -55,6 +56,12 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private val http = OkHttpClient()
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+    private val log = SyncLog(context)
+
+    /** Recent sync history, for the in-app "Sync log" view (see the issue about silent hangs/timeouts). */
+    fun logText(): String = log.read()
+
+    fun clearLog() = log.clear()
 
     /** Intent for the system's Google account picker; consent is requested separately via [authorize]. */
     fun accountPickerIntent(): Intent =
@@ -111,11 +118,25 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     suspend fun sync(): SyncResult = withContext(Dispatchers.IO) {
         val account = currentAccount() ?: return@withContext SyncResult(error = "Not signed in")
 
+        log.add("Sync started")
+        val result = withTimeoutOrNull(SYNC_TIMEOUT_MS) { runSync(account) }
+            ?: SyncResult(error = "Sync timed out after ${SYNC_TIMEOUT_MS / 1000}s").also {
+                log.add("Sync timed out after ${SYNC_TIMEOUT_MS / 1000}s")
+            }
+        if (result.error == null) {
+            log.add("Sync finished: ↑${result.uploaded} ↓${result.downloaded} ✕${result.deleted}")
+        }
+        result
+    }
+
+    private suspend fun runSync(account: Account): SyncResult {
         try {
             val token = GoogleAuthUtil.getToken(context, account, "oauth2:$DRIVE_FILE_SCOPE")
+            log.add("Got auth token")
             val rootId = ensureRootFolder(token)
             val remote = listRemoteDocs(rootId, token).associateBy { it.docId }
             val locals = repo.list().associateBy { it.id }
+            log.add("Found ${remote.size} remote, ${locals.size} local document(s)")
 
             // Baseline of what existed at the last successful sync, used to tell a
             // genuine deletion (gone on one side, unchanged on the other) apart
@@ -137,11 +158,13 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                     local != null && rem != null -> {
                         when {
                             local.updatedAt > rem.updatedAt -> {
+                                log.add("Uploading '${local.title}' ($id)")
                                 pushFiles(id, rem.folderId, token)
                                 updateFolderMeta(rem.folderId, local.title, local.updatedAt, token)
                                 uploaded++
                             }
                             rem.updatedAt > local.updatedAt -> {
+                                log.add("Downloading '${local.title}' ($id)")
                                 pullFiles(id, rem.folderId, token)
                                 downloaded++
                                 downloadedIds.add(id)
@@ -154,9 +177,11 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                         // Missing remotely. If it was synced before and hasn't been
                         // touched locally since, it was deleted on the other device.
                         if (base != null && local.updatedAt <= base) {
+                            log.add("Deleting local copy of '${local.title}' ($id)")
                             repo.delete(id)
                             deleted++
                         } else {
+                            log.add("Uploading new document '${local.title}' ($id)")
                             val folderId = createFolder(rootId, local.title, id, local.updatedAt, token)
                             pushFiles(id, folderId, token)
                             uploaded++
@@ -166,9 +191,11 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
                     local == null && rem != null -> {
                         if (base != null && rem.updatedAt <= base) {
+                            log.add("Deleting remote copy of document $id")
                             deleteRemoteFolder(rem.folderId, token)
                             deleted++
                         } else {
+                            log.add("Downloading new document $id")
                             pullFiles(id, rem.folderId, token)
                             downloaded++
                             downloadedIds.add(id)
@@ -186,7 +213,9 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                 downloadedIds = downloadedIds,
             )
         } catch (e: Exception) {
-            SyncResult(error = e.message ?: e.javaClass.simpleName)
+            val message = e.message ?: e.javaClass.simpleName
+            log.add("Sync failed: ${e.javaClass.simpleName}: $message")
+            SyncResult(error = message)
         }
     }
 
@@ -378,5 +407,8 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         private const val PREFS_NAME = "drive_sync"
         private const val KEY_ACCOUNT_NAME = "account_name"
         private val JSON_MEDIA = "application/json; charset=UTF-8".toMediaType()
+
+        /** Upper bound on a single pass so a stuck network/auth call fails loudly instead of hanging forever. */
+        private const val SYNC_TIMEOUT_MS = 2 * 60 * 1000L
     }
 }
