@@ -130,7 +130,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     }
 
     private suspend fun runSync(account: Account): SyncResult {
-        try {
+        return try {
             val token = GoogleAuthUtil.getToken(context, account, "oauth2:$DRIVE_FILE_SCOPE")
             log.add("Got auth token")
             val rootId = ensureRootFolder(token)
