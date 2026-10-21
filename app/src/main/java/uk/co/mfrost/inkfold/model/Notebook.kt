@@ -1,4 +1,4 @@
-package app.pennotes.model
+package uk.co.mfrost.inkfold.model
 
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -95,7 +95,7 @@ data class PageRef(
 )
 
 /**
- * The `.pennotes` manifest: a small JSON wrapper that lists a document's pages
+ * The `.inkfold` manifest: a small JSON wrapper that lists a document's pages
  * in render order, each pointing at an underlying file (SVG today, Markdown in
  * future). The manifest plus those files live together in one folder.
  */

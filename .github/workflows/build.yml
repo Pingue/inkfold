@@ -53,7 +53,7 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           # The action's v3 default package list still requests the legacy
           # "tools" package, which Google has removed from the SDK repository
@@ -80,7 +80,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: pennotes-debug-apk
+          name: inkfold-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
@@ -105,7 +105,7 @@ jobs:
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         uses: actions/upload-artifact@v7
         with:
-          name: pennotes-release-apk
+          name: inkfold-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
@@ -126,7 +126,7 @@ jobs:
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         uses: actions/upload-artifact@v7
         with:
-          name: pennotes-release-aab
+          name: inkfold-release-aab
           path: app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
 

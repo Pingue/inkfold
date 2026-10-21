@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PenNotes"
+rootProject.name = "Inkfold"
 include(":app")

@@ -1,4 +1,4 @@
-package app.pennotes.ui
+package uk.co.mfrost.inkfold.ui
 
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
@@ -80,15 +81,15 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 import androidx.compose.ui.viewinterop.AndroidView
-import app.pennotes.drawing.DrawingView
-import app.pennotes.drawing.EraserMode
-import app.pennotes.drawing.ToolSettings
-import app.pennotes.export.Exporter
-import app.pennotes.model.Page
-import app.pennotes.model.PageOrientation
-import app.pennotes.model.PageType
-import app.pennotes.model.ToolType
-import app.pennotes.storage.Prefs
+import uk.co.mfrost.inkfold.drawing.DrawingView
+import uk.co.mfrost.inkfold.drawing.EraserMode
+import uk.co.mfrost.inkfold.drawing.ToolSettings
+import uk.co.mfrost.inkfold.export.Exporter
+import uk.co.mfrost.inkfold.model.Page
+import uk.co.mfrost.inkfold.model.PageOrientation
+import uk.co.mfrost.inkfold.model.PageType
+import uk.co.mfrost.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.storage.Prefs
 import kotlinx.coroutines.launch
 
 private val PRESET_COLORS = listOf(
@@ -330,62 +331,65 @@ private fun EditorTopBar(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         tonalElevation = 3.dp,
     ) {
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        Column {
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Column(Modifier.weight(1f).clickable { onTitleClick() }) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "$pageCount page${if (pageCount == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                IconButton(onClick = onTogglePenMode) {
+                    Icon(
+                        if (penMode) Icons.Filled.Edit else Icons.Filled.TouchApp,
+                        contentDescription = if (penMode) "Pen mode: stylus draws, finger scrolls" else "Finger mode: touch draws",
+                        tint = if (penMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onUndo) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                }
+                IconButton(onClick = onRedo) {
+                    Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
+                }
+                IconButton(onClick = { addMenu = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add page")
+                }
+                DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                    DropdownMenuItem(text = { Text("Add portrait page") }, onClick = {
+                        addMenu = false; onAddPage(PageOrientation.PORTRAIT)
+                    })
+                    DropdownMenuItem(text = { Text("Add landscape page") }, onClick = {
+                        addMenu = false; onAddPage(PageOrientation.LANDSCAPE)
+                    })
+                    DropdownMenuItem(text = { Text("Add text (Markdown) page") }, onClick = {
+                        addMenu = false; onAddMarkdownPage()
+                    })
+                }
+                IconButton(onClick = onSync, enabled = !syncing) {
+                    Icon(Icons.Filled.CloudSync, contentDescription = "Sync")
+                }
+                IconButton(onClick = { overflow = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                }
+                DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                    DropdownMenuItem(text = { Text("Save PDF to device") }, onClick = { overflow = false; onSavePdf() })
+                    DropdownMenuItem(text = { Text("Share PDF") }, onClick = { overflow = false; onSharePdf() })
+                    DropdownMenuItem(text = { Text("Share JPG (per page)") }, onClick = { overflow = false; onExportJpg() })
+                    DropdownMenuItem(text = { Text("Make page portrait") }, onClick = { overflow = false; onMakePortrait() })
+                    DropdownMenuItem(text = { Text("Make page landscape") }, onClick = { overflow = false; onMakeLandscape() })
+                    DropdownMenuItem(text = { Text("Delete current page") }, onClick = { overflow = false; onDeletePage() })
+                    DropdownMenuItem(text = { Text("Reset zoom") }, onClick = { overflow = false; onResetZoom() })
+                }
             }
-            Column(Modifier.weight(1f).clickable { onTitleClick() }) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    "$pageCount page${if (pageCount == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            IconButton(onClick = onTogglePenMode) {
-                Icon(
-                    if (penMode) Icons.Filled.Edit else Icons.Filled.TouchApp,
-                    contentDescription = if (penMode) "Pen mode: stylus draws, finger scrolls" else "Finger mode: touch draws",
-                    tint = if (penMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onUndo) {
-                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
-            }
-            IconButton(onClick = onRedo) {
-                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
-            }
-            IconButton(onClick = { addMenu = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add page")
-            }
-            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
-                DropdownMenuItem(text = { Text("Add portrait page") }, onClick = {
-                    addMenu = false; onAddPage(PageOrientation.PORTRAIT)
-                })
-                DropdownMenuItem(text = { Text("Add landscape page") }, onClick = {
-                    addMenu = false; onAddPage(PageOrientation.LANDSCAPE)
-                })
-                DropdownMenuItem(text = { Text("Add text (Markdown) page") }, onClick = {
-                    addMenu = false; onAddMarkdownPage()
-                })
-            }
-            IconButton(onClick = onSync, enabled = !syncing) {
-                Icon(Icons.Filled.CloudSync, contentDescription = "Sync")
-            }
-            IconButton(onClick = { overflow = true }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "More")
-            }
-            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
-                DropdownMenuItem(text = { Text("Save PDF to device") }, onClick = { overflow = false; onSavePdf() })
-                DropdownMenuItem(text = { Text("Share PDF") }, onClick = { overflow = false; onSharePdf() })
-                DropdownMenuItem(text = { Text("Share JPG (per page)") }, onClick = { overflow = false; onExportJpg() })
-                DropdownMenuItem(text = { Text("Make page portrait") }, onClick = { overflow = false; onMakePortrait() })
-                DropdownMenuItem(text = { Text("Make page landscape") }, onClick = { overflow = false; onMakeLandscape() })
-                DropdownMenuItem(text = { Text("Delete current page") }, onClick = { overflow = false; onDeletePage() })
-                DropdownMenuItem(text = { Text("Reset zoom") }, onClick = { overflow = false; onResetZoom() })
-            }
+            if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     }
 }

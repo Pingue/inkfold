@@ -1,11 +1,11 @@
-package app.pennotes.sync
+package uk.co.mfrost.inkfold.sync
 
 import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import app.pennotes.storage.DocumentRepository
+import uk.co.mfrost.inkfold.storage.DocumentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
  * Runs a Drive sync pass while the app is closed, via WorkManager's periodic
  * scheduler (see [SyncCoordinator.schedulePeriodicSync]).
  *
- * This complements, rather than replaces, [app.pennotes.ui.AppViewModel]'s own
+ * This complements, rather than replaces, [uk.co.mfrost.inkfold.ui.AppViewModel]'s own
  * 5-minute in-app sync loop: that loop only runs while the process is alive,
  * so without this worker, changes made on another device wouldn't show up
  * until the app was reopened *and* had run another sync.
@@ -25,7 +25,7 @@ import kotlinx.coroutines.withContext
  *    foreground sync will surface the real sign-in prompt.
  *  - Reload a document that's open in the editor. Instead it skips entirely
  *    while the app is in the foreground (see [isAppInForeground]), leaving
- *    that case to [app.pennotes.ui.AppViewModel.sync], which already prompts
+ *    that case to [uk.co.mfrost.inkfold.ui.AppViewModel.sync], which already prompts
  *    the user before discarding in-memory edits.
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
