@@ -175,6 +175,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                             local.updatedAt > rem.updatedAt -> {
                                 log.add("Uploading '${local.title}' ($id)")
                                 pushFiles(id, rem.folderId, token)
+                                currentCoroutineContext().ensureActive()
                                 updateFolderMeta(rem.folderId, local.title, local.updatedAt, token)
                                 uploaded++
                             }
