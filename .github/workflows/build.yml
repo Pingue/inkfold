@@ -6,6 +6,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Serialise runs per branch: version_code/version_name are derived from the
+# latest git tag at checkout, so two runs for the same branch racing each
+# other can compute the same next version and collide (one gets rejected by
+# Play Console for reusing a version code, and never gets to tag the release).
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
