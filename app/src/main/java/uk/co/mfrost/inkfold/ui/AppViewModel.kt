@@ -10,7 +10,8 @@ import androidx.lifecycle.viewModelScope
 import uk.co.mfrost.inkfold.model.Notebook
 import uk.co.mfrost.inkfold.model.snapshot
 import uk.co.mfrost.inkfold.storage.DocumentRepository
-import uk.co.mfrost.inkfold.storage.DocumentSummary
+import uk.co.mfrost.inkfold.storage.FolderContents
+import uk.co.mfrost.inkfold.storage.SectionSummary
 import uk.co.mfrost.inkfold.sync.DriveSync
 import uk.co.mfrost.inkfold.sync.SyncCoordinator
 import com.google.android.gms.common.api.ApiException
@@ -25,7 +26,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val repo = DocumentRepository(app)
     val driveSync = DriveSync(app, repo)
 
-    var notebooks by mutableStateOf<List<DocumentSummary>>(emptyList())
+    /** Path (slash-separated, "" for the root) of the section currently browsed in the list screen. */
+    var currentPath by mutableStateOf("")
+        private set
+    var folderContents by mutableStateOf(FolderContents(emptyList(), emptyList()))
         private set
     var current by mutableStateOf<Notebook?>(null, neverEqualPolicy())
         private set
@@ -68,18 +72,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() = viewModelScope.launch {
-        notebooks = repo.list()
+        folderContents = repo.listFolder(currentPath)
     }
 
     fun refreshAccount() {
         signedInEmail = driveSync.currentAccount()?.name
     }
 
+    /** Navigates into a subsection of the current folder. */
+    fun openSection(path: String) = viewModelScope.launch {
+        currentPath = path
+        folderContents = repo.listFolder(currentPath)
+    }
+
+    /** Navigates to the parent of the current folder; a no-op at the root. */
+    fun navigateUp() = viewModelScope.launch {
+        currentPath = currentPath.substringBeforeLast('/', "")
+        folderContents = repo.listFolder(currentPath)
+    }
+
     fun create(title: String) = viewModelScope.launch {
-        val nb = repo.create(title.ifBlank { "Untitled" })
-        notebooks = repo.list()
+        val nb = repo.create(title.ifBlank { "Untitled" }, currentPath)
+        folderContents = repo.listFolder(currentPath)
         current = nb
     }
+
+    fun createSection(title: String) = viewModelScope.launch {
+        repo.createSection(title.ifBlank { "Untitled" }, currentPath)
+        folderContents = repo.listFolder(currentPath)
+    }
+
+    /** Files notebook [id] directly under [toSectionPath] ("" for the top level). */
+    fun moveToSection(id: String, toSectionPath: String) = viewModelScope.launch {
+        repo.moveNotebook(id, toSectionPath)
+        folderContents = repo.listFolder(currentPath)
+    }
+
+    suspend fun allSections(): List<SectionSummary> = repo.allSections()
 
     fun open(id: String) = viewModelScope.launch {
         pendingRemoteDoc = null
@@ -91,7 +120,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pendingRemoteDoc = null
         current?.let { nb -> SyncCoordinator.exclusive { repo.save(nb.snapshot()) } }
         current = null
-        notebooks = repo.list()
+        folderContents = repo.listFolder(currentPath)
         if (driveSync.isSignedIn()) sync(silent = true)
     }
 
@@ -115,7 +144,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(id: String) = viewModelScope.launch {
         repo.delete(id)
-        notebooks = repo.list()
+        folderContents = repo.listFolder(currentPath)
     }
 
     fun rename(title: String) {
@@ -178,7 +207,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             // Refresh the list; the open document keeps its in-memory state and is
             // not reloaded here, so active edits are never clobbered mid-session.
-            notebooks = repo.list()
+            folderContents = repo.listFolder(currentPath)
 
             // If the open document was updated from Drive, stash the fresh copy
             // and let the editor offer to reload it (rather than silently losing

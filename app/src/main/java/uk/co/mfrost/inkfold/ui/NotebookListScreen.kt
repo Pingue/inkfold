@@ -15,9 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.co.mfrost.inkfold.storage.DocumentSummary
+import uk.co.mfrost.inkfold.storage.SectionSummary
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -61,7 +64,10 @@ fun NotebookListScreen(
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var showCreate by remember { mutableStateOf(false) }
+    var showCreateChooser by remember { mutableStateOf(false) }
+    var showCreateNotebook by remember { mutableStateOf(false) }
+    var showCreateSection by remember { mutableStateOf(false) }
+    var moveTarget by remember { mutableStateOf<DocumentSummary?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var showSyncLog by remember { mutableStateOf(false) }
     var syncLogText by remember { mutableStateOf("") }
@@ -77,12 +83,21 @@ fun NotebookListScreen(
         if (showSyncLog && !vm.syncing) syncLogText = vm.syncLogText()
     }
 
+    val contents = vm.folderContents
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Inkfold") },
+                    title = { Text(vm.currentPath.substringAfterLast('/').ifEmpty { "Inkfold" }) },
+                    navigationIcon = {
+                        if (vm.currentPath.isNotEmpty()) {
+                            IconButton(onClick = { vm.navigateUp() }) {
+                                Icon(Icons.Filled.ArrowBack, contentDescription = "Up")
+                            }
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { vm.sync() }, enabled = !vm.syncing) {
                             Icon(
@@ -120,15 +135,15 @@ fun NotebookListScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreate = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "New notebook")
+            FloatingActionButton(onClick = { showCreateChooser = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "New")
             }
         },
     ) { padding ->
-        if (vm.notebooks.isEmpty()) {
+        if (contents.sections.isEmpty() && contents.notebooks.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text(
-                    "No notebooks yet.\nTap + to create one.",
+                    "Nothing here yet.\nTap + to create a notebook or section.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
             }
@@ -139,24 +154,60 @@ fun NotebookListScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(vm.notebooks, key = { it.id }) { summary ->
+                items(contents.sections, key = { "section:${it.path}" }) { section ->
+                    SectionCard(summary = section, onOpen = { vm.openSection(section.path) })
+                }
+                items(contents.notebooks, key = { it.id }) { summary ->
                     NotebookCard(
                         summary = summary,
                         onOpen = { vm.open(summary.id) },
                         onDelete = { vm.delete(summary.id) },
+                        onMove = { moveTarget = summary },
                     )
                 }
             }
         }
     }
 
-    if (showCreate) {
+    if (showCreateChooser) {
+        AlertDialog(
+            onDismissRequest = { showCreateChooser = false },
+            title = { Text("New") },
+            text = { Text("What would you like to create?") },
+            confirmButton = {
+                TextButton(onClick = { showCreateChooser = false; showCreateNotebook = true }) { Text("Notebook") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateChooser = false; showCreateSection = true }) { Text("Section") }
+            },
+        )
+    }
+
+    if (showCreateNotebook) {
         TextPromptDialog(
             title = "New notebook",
             initial = "Untitled",
             confirmLabel = "Create",
-            onConfirm = { showCreate = false; vm.create(it) },
-            onDismiss = { showCreate = false },
+            onConfirm = { showCreateNotebook = false; vm.create(it) },
+            onDismiss = { showCreateNotebook = false },
+        )
+    }
+
+    if (showCreateSection) {
+        TextPromptDialog(
+            title = "New section",
+            initial = "New section",
+            confirmLabel = "Create",
+            onConfirm = { showCreateSection = false; vm.createSection(it) },
+            onDismiss = { showCreateSection = false },
+        )
+    }
+
+    moveTarget?.let { target ->
+        MoveToSectionDialog(
+            notebookId = target.id,
+            vm = vm,
+            onDismiss = { moveTarget = null },
         )
     }
 
@@ -201,14 +252,77 @@ private fun SyncLogDialog(
     )
 }
 
+@Composable
+private fun SectionCard(
+    summary: SectionSummary,
+    onOpen: () -> Unit,
+) {
+    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Icon(Icons.Filled.Folder, contentDescription = null)
+            Text(
+                summary.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** Lets the user file [notebookId] into any existing section, or back to the top level. */
+@Composable
+private fun MoveToSectionDialog(
+    notebookId: String,
+    vm: AppViewModel,
+    onDismiss: () -> Unit,
+) {
+    var sections by remember { mutableStateOf<List<SectionSummary>>(emptyList()) }
+    LaunchedEffect(Unit) { sections = vm.allSections() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move to") },
+        text = {
+            Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                TextButton(
+                    onClick = { vm.moveToSection(notebookId, ""); onDismiss() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Top level", modifier = Modifier.fillMaxWidth())
+                }
+                for (section in sections) {
+                    TextButton(
+                        onClick = { vm.moveToSection(notebookId, section.path); onDismiss() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(section.path, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                if (sections.isEmpty()) {
+                    Text(
+                        "No sections yet - create one first.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotebookCard(
     summary: DocumentSummary,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
+    onMove: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Box(Modifier.fillMaxWidth()) {
@@ -227,9 +341,14 @@ private fun NotebookCard(
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
+                        text = { Text("Move to...") },
+                        leadingIcon = { Icon(Icons.Filled.Folder, null) },
+                        onClick = { menu = false; onMove() },
+                    )
+                    DropdownMenuItem(
                         text = { Text("Delete") },
                         leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                        onClick = { menu = false; onDelete() },
+                        onClick = { menu = false; confirmDelete = true },
                     )
                 }
             }
@@ -243,6 +362,20 @@ private fun NotebookCard(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete \"${summary.title}\"?") },
+            text = { Text("This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 
