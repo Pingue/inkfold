@@ -43,6 +43,8 @@ data class SyncResult(
     val deleted: Int = 0,
     /** Document ids whose local copy was updated from Drive this pass. */
     val downloadedIds: List<String> = emptyList(),
+    /** Document ids whose local copy was removed this pass (deleted on another device). */
+    val deletedIds: List<String> = emptyList(),
     val error: String? = null,
 )
 
@@ -162,6 +164,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
             var downloaded = 0
             var deleted = 0
             val downloadedIds = mutableListOf<String>()
+            val deletedIds = mutableListOf<String>()
             val survivors = HashMap<String, Long>()
 
             for (id in locals.keys + remote.keys) {
@@ -197,6 +200,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                             log.add("Deleting local copy of '${local.title}' ($id)")
                             repo.delete(id)
                             deleted++
+                            deletedIds.add(id)
                         } else {
                             log.add("Uploading new document '${local.title}' ($id)")
                             val folderId = createFolder(rootId, local.title, id, local.updatedAt, token)
@@ -229,6 +233,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
                 downloaded = downloaded,
                 deleted = deleted,
                 downloadedIds = downloadedIds,
+                deletedIds = deletedIds,
             )
         } catch (e: CancellationException) {
             throw e

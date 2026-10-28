@@ -209,11 +209,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // not reloaded here, so active edits are never clobbered mid-session.
             folderContents = repo.listFolder(currentPath)
 
-            // If the open document was updated from Drive, stash the fresh copy
-            // and let the editor offer to reload it (rather than silently losing
-            // the remote change to the local cache).
+            // If the open document was deleted on another device, close it here
+            // too and drop any queued autosave, so it can't get silently
+            // recreated on disk by the next edit's debounced save.
             val open = current
-            if (open != null && open.id in result.downloadedIds && pendingRemoteDoc?.id != open.id) {
+            if (open != null && open.id in result.deletedIds) {
+                saveJob?.cancel()
+                pendingRemoteDoc = null
+                current = null
+                statusMessage = "'${open.title}' was deleted on another device"
+            } else if (open != null && open.id in result.downloadedIds && pendingRemoteDoc?.id != open.id) {
+                // Updated (not deleted) from Drive: stash the fresh copy and let
+                // the editor offer to reload it, rather than silently losing the
+                // remote change to the local cache.
                 pendingRemoteDoc = repo.load(open.id)
             }
         }
