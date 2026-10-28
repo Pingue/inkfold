@@ -41,8 +41,56 @@ class DocumentRepository(context: Context) {
 
     val dir: File = File(context.filesDir, "documents").apply { mkdirs() }
 
+    /**
+     * Forensic copies of files that failed to decode on load, kept outside
+     * `dir` so they're never picked up by [filesFor] (and so never pushed to
+     * Drive or deleted by [save]'s per-document file cleanup).
+     */
+    private val corruptDir: File = File(context.filesDir, "corrupted-backups").apply { mkdirs() }
+
     fun folderFor(id: String): File = File(dir, id)
     private fun manifestFile(id: String): File = File(folderFor(id), MANIFEST)
+
+    private fun backupCorrupt(id: String, file: File) {
+        runCatching {
+            file.copyTo(File(corruptDir, "$id-${file.name}.corrupt-${System.currentTimeMillis()}"), overwrite = true)
+        }
+    }
+
+    /** Writes [content] via a temp file + atomic rename, so a crash mid-write never leaves a truncated file. */
+    private fun File.writeTextAtomically(content: String) {
+        val tmp = File(parentFile, "$name.tmp")
+        tmp.writeText(content)
+        if (!tmp.renameTo(this)) {
+            tmp.copyTo(this, overwrite = true)
+            tmp.delete()
+        }
+    }
+
+    /**
+     * Rebuilds a minimal manifest from whatever page files are still present
+     * in [folder], for when `index.inkfold` itself is missing or corrupt.
+     * Page order isn't recoverable (file ids are UUIDs), but this keeps the
+     * document and its drawings from silently vanishing.
+     */
+    private fun recoverManifest(folder: File): DocumentManifest? {
+        val files = folder.listFiles { f -> f.isFile && (f.extension == "svg" || f.extension == "md") }
+            ?.sortedBy { it.name } ?: return null
+        if (files.isEmpty()) return null
+        val pages = files.map { f ->
+            PageRef(
+                id = f.nameWithoutExtension,
+                type = if (f.extension == "md") PageType.MARKDOWN else PageType.SVG,
+                file = f.name,
+            )
+        }.toMutableList()
+        return DocumentManifest(
+            id = folder.name,
+            title = "Recovered notebook",
+            updatedAt = files.maxOf { it.lastModified() },
+            pages = pages,
+        )
+    }
 
     /** All files that make up a document on disk (manifest + page files). */
     fun filesFor(id: String): List<File> =
@@ -53,22 +101,37 @@ class DocumentRepository(context: Context) {
             .mapNotNull { folder ->
                 val mf = File(folder, MANIFEST)
                 if (!mf.exists()) return@mapNotNull null
-                runCatching {
-                    val m = json.decodeFromString(DocumentManifest.serializer(), mf.readText())
-                    DocumentSummary(m.id, m.title, m.pages.size, m.updatedAt)
+                val decoded = runCatching {
+                    json.decodeFromString(DocumentManifest.serializer(), mf.readText())
                 }.getOrNull()
+                val m = decoded ?: recoverManifest(folder)?.also { backupCorrupt(folder.name, mf) }
+                m?.let { DocumentSummary(it.id, it.title, it.pages.size, it.updatedAt) }
             }
             .sortedByDescending { it.updatedAt }
     }
 
-    suspend fun load(id: String): Notebook? = withContext(Dispatchers.IO) {
+    /**
+     * [onCorruptPage] is called once per page (or the manifest) that failed to
+     * decode, with a message fit to show the user — so a corrupt file surfaces
+     * as a visible warning instead of silently becoming "empty" and then being
+     * overwritten for good by the next save.
+     */
+    suspend fun load(id: String, onCorruptPage: (String) -> Unit = {}): Notebook? = withContext(Dispatchers.IO) {
+        val folder = folderFor(id)
         val mf = manifestFile(id)
         if (!mf.exists()) return@withContext null
-        val manifest = runCatching {
+        val decoded = runCatching {
             json.decodeFromString(DocumentManifest.serializer(), mf.readText())
-        }.getOrNull() ?: return@withContext null
+        }.getOrNull()
+        val manifest = if (decoded != null) {
+            decoded
+        } else {
+            val recovered = recoverManifest(folder) ?: return@withContext null
+            backupCorrupt(id, mf)
+            onCorruptPage("This notebook's index was unreadable; recovered ${recovered.pages.size} page(s) from its files")
+            recovered
+        }
 
-        val folder = folderFor(id)
         val pages = manifest.pages.map { ref ->
             val pf = File(folder, ref.file)
             val exists = pf.exists()
@@ -79,12 +142,19 @@ class DocumentRepository(context: Context) {
                     type = PageType.MARKDOWN,
                     markdown = if (exists) pf.readText() else "",
                 )
-                PageType.SVG -> Page(
-                    id = ref.id,
-                    orientation = ref.orientation,
-                    strokes = if (exists) SvgPage.parseStrokes(pf.readText()) else mutableListOf(),
-                    type = PageType.SVG,
-                )
+                PageType.SVG -> {
+                    val parsed = if (exists) SvgPage.parseStrokes(pf.readText()) else mutableListOf()
+                    if (parsed == null) {
+                        backupCorrupt(id, pf)
+                        onCorruptPage("A page in '${manifest.title}' was unreadable and has been backed up")
+                    }
+                    Page(
+                        id = ref.id,
+                        orientation = ref.orientation,
+                        strokes = parsed ?: mutableListOf(),
+                        type = PageType.SVG,
+                    )
+                }
             }
         }.toMutableList()
 
@@ -104,12 +174,12 @@ class DocumentRepository(context: Context) {
             when (page.type) {
                 PageType.MARKDOWN -> {
                     val file = "${page.id}.md"
-                    File(folder, file).writeText(page.markdown)
+                    File(folder, file).writeTextAtomically(page.markdown)
                     PageRef(id = page.id, type = PageType.MARKDOWN, file = file, orientation = page.orientation)
                 }
                 PageType.SVG -> {
                     val file = "${page.id}.svg"
-                    File(folder, file).writeText(SvgPage.toSvg(page))
+                    File(folder, file).writeTextAtomically(SvgPage.toSvg(page))
                     PageRef(id = page.id, type = PageType.SVG, file = file, orientation = page.orientation)
                 }
             }
@@ -121,7 +191,7 @@ class DocumentRepository(context: Context) {
             updatedAt = notebook.updatedAt,
             pages = refs,
         )
-        File(folder, MANIFEST).writeText(json.encodeToString(DocumentManifest.serializer(), manifest))
+        File(folder, MANIFEST).writeTextAtomically(json.encodeToString(DocumentManifest.serializer(), manifest))
 
         // Drop files for pages that no longer exist.
         val keep = refs.map { it.file }.toMutableSet().apply { add(MANIFEST) }
@@ -152,7 +222,7 @@ class DocumentRepository(context: Context) {
 
     fun writeFile(id: String, name: String, content: String) {
         val folder = folderFor(id).apply { mkdirs() }
-        File(folder, name).writeText(content)
+        File(folder, name).writeTextAtomically(content)
     }
 
     companion object {

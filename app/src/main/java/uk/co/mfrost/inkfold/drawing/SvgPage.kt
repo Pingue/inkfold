@@ -43,17 +43,23 @@ object SvgPage {
         return sb.toString()
     }
 
-    /** Recovers strokes from the embedded metadata; empty if absent/unreadable. */
-    fun parseStrokes(svg: String): MutableList<Stroke> {
+    /**
+     * Recovers strokes from the embedded metadata. Returns an empty list for a
+     * genuinely blank page (no `<inkfold:strokes>` element at all), but `null`
+     * when that element is present and truncated or fails to decode — callers
+     * must tell these apart, since silently treating corrupt data as "empty"
+     * would let the next save overwrite the original file with nothing.
+     */
+    fun parseStrokes(svg: String): MutableList<Stroke>? {
         val start = svg.indexOf(OPEN)
         if (start < 0) return mutableListOf()
         val from = start + OPEN.length
         val end = svg.indexOf(CLOSE, from)
-        if (end < 0) return mutableListOf()
+        if (end < 0) return null
         val text = svg.substring(from, end)
         return runCatching {
             json.decodeFromString(strokeListSerializer, text).toMutableList()
-        }.getOrDefault(mutableListOf())
+        }.getOrNull()
     }
 
     private fun appendStroke(sb: StringBuilder, stroke: Stroke) {

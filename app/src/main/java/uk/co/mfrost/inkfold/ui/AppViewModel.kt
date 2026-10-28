@@ -83,7 +83,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun open(id: String) = viewModelScope.launch {
         pendingRemoteDoc = null
-        current = repo.load(id)
+        val warnings = mutableListOf<String>()
+        current = repo.load(id) { warnings += it }
+        if (warnings.isNotEmpty()) statusMessage = warnings.first()
     }
 
     fun close() = viewModelScope.launch {
