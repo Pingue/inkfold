@@ -89,6 +89,7 @@ import uk.co.mfrost.inkfold.model.Page
 import uk.co.mfrost.inkfold.model.PageOrientation
 import uk.co.mfrost.inkfold.model.PageType
 import uk.co.mfrost.inkfold.model.ToolType
+import uk.co.mfrost.inkfold.model.snapshot
 import uk.co.mfrost.inkfold.storage.Prefs
 import kotlinx.coroutines.launch
 
@@ -136,8 +137,10 @@ fun EditorScreen(vm: AppViewModel) {
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) scope.launch {
-            val pdf = Exporter.exportPdf(context, notebook)
+            // Snapshot now, on the main thread, so export never races live strokes.
+            val snapshot = notebook.snapshot()
             val ok = runCatching {
+                val pdf = Exporter.exportPdf(context, snapshot)
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     pdf.inputStream().use { it.copyTo(out) }
                 }
@@ -148,7 +151,10 @@ fun EditorScreen(vm: AppViewModel) {
 
     fun share(mime: String, produce: suspend () -> List<java.io.File>) {
         scope.launch {
-            val files = produce()
+            val files = runCatching { produce() }.getOrElse {
+                vm.statusMessage = "Couldn't export"
+                return@launch
+            }
             if (files.isEmpty()) return@launch
             val uris = ArrayList(files.map { Exporter.uriFor(context, it) })
             val intent = if (uris.size == 1) {
@@ -202,9 +208,9 @@ fun EditorScreen(vm: AppViewModel) {
             onAddMarkdownPage = {
                 drawingView?.addPage(PageOrientation.PORTRAIT, PageType.MARKDOWN)?.let { openMarkdown(it) }
             },
-            onSharePdf = { share("application/pdf") { listOf(Exporter.exportPdf(context, notebook)) } },
+            onSharePdf = { share("application/pdf") { listOf(Exporter.exportPdf(context, notebook.snapshot())) } },
             onSavePdf = { savePdf.launch("${notebook.title}.pdf") },
-            onExportJpg = { share("image/jpeg") { Exporter.exportJpgs(context, notebook) } },
+            onExportJpg = { share("image/jpeg") { Exporter.exportJpgs(context, notebook.snapshot()) } },
             onSync = { vm.sync() },
             syncing = vm.syncing,
             onMakePortrait = { drawingView?.setFocusedPageOrientation(PageOrientation.PORTRAIT) },
