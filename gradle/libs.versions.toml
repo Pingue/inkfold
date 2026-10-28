@@ -10,7 +10,7 @@ serialization = "1.11.0"
 playServicesAuth = "22.0.0"
 okhttp = "5.5.0"
 documentFile = "1.1.0"
-workManager = "2.10.0"
+workManager = "2.12.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
