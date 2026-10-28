@@ -89,7 +89,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun close() = viewModelScope.launch {
         saveJob?.cancel()
         pendingRemoteDoc = null
-        current?.let { repo.save(it.snapshot()) }
+        current?.let { nb -> SyncCoordinator.exclusive { repo.save(nb.snapshot()) } }
         current = null
         notebooks = repo.list()
         if (driveSync.isSignedIn()) sync(silent = true)
@@ -100,14 +100,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Debounced autosave: coalesces rapid edits into one write, and serialises a
      * deep [snapshot] (taken on the main thread) so the background write never
-     * races the live strokes being drawn.
+     * races the live strokes being drawn. Takes the same lock as [sync] so this
+     * write can never interleave with a foreground or background sync pass
+     * touching the same document's files.
      */
     fun saveCurrent() {
         val nb = current ?: return
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(SAVE_DEBOUNCE_MS)
-            repo.save(nb.snapshot())
+            SyncCoordinator.exclusive { repo.save(nb.snapshot()) }
         }
     }
 
