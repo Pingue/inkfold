@@ -209,6 +209,7 @@ private fun NotebookCard(
     onDelete: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Box(Modifier.fillMaxWidth()) {
@@ -229,7 +230,7 @@ private fun NotebookCard(
                     DropdownMenuItem(
                         text = { Text("Delete") },
                         leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                        onClick = { menu = false; onDelete() },
+                        onClick = { menu = false; confirmDelete = true },
                     )
                 }
             }
@@ -243,6 +244,20 @@ private fun NotebookCard(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete \"${summary.title}\"?") },
+            text = { Text("This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 
