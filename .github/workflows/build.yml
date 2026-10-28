@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -129,6 +130,21 @@ jobs:
           name: inkfold-release-aab
           path: app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
+
+      # ---- Publish to the Play Console internal testing track (main only,
+      # and only when both the keystore and the Play service account are
+      # configured) ----
+      - name: Upload to Play Console (internal track)
+        if: >-
+          ${{ env.KEYSTORE_BASE64 != '' && env.PLAY_SERVICE_ACCOUNT_JSON != '' &&
+            github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: uk.co.mfrost.inkfold
+          releaseFiles: app/build/outputs/bundle/release/*.aab
+          track: internal
+          status: completed
 
       # ---- Tag and publish a GitHub release (only for builds on main) ----
       - name: Tag and create GitHub release
