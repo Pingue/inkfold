@@ -131,9 +131,11 @@ class DrawingView(context: Context) : View(context) {
     private val erasedThisGesture = mutableListOf<Stroke>()
 
     // ---- Undo / redo (ops remember which page they touched) ---------------
-    private sealed interface EditOp
-    private data class AddOp(val page: Page, val stroke: Stroke) : EditOp
-    private data class EraseOp(val page: Page, val strokes: List<Stroke>) : EditOp
+    private sealed interface EditOp {
+        val page: Page
+    }
+    private data class AddOp(override val page: Page, val stroke: Stroke) : EditOp
+    private data class EraseOp(override val page: Page, val strokes: List<Stroke>) : EditOp
 
     private val undoStack = ArrayDeque<EditOp>()
     private val redoStack = ArrayDeque<EditOp>()
@@ -234,7 +236,11 @@ class DrawingView(context: Context) : View(context) {
     fun deleteFocusedPage() {
         if (notebook.pages.size <= 1) return
         val i = focusedPageIndex()
-        notebook.pages.removeAt(i)
+        val page = notebook.pages.removeAt(i)
+        // Otherwise a later undo/redo would silently edit a page that's no
+        // longer part of the notebook.
+        undoStack.removeAll { it.page === page }
+        redoStack.removeAll { it.page === page }
         recomputeLayout()
         clampPan()
         onChanged?.invoke()
