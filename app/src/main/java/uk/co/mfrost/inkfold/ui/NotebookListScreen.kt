@@ -61,6 +61,7 @@ import java.util.Date
 fun NotebookListScreen(
     vm: AppViewModel,
     onSignIn: () -> Unit,
+    onPickStorageFolder: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -71,6 +72,7 @@ fun NotebookListScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var showSyncLog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showStorageLocation by remember { mutableStateOf(false) }
     var syncLogText by remember { mutableStateOf("") }
 
     LaunchedEffect(vm.statusMessage) {
@@ -128,6 +130,9 @@ fun NotebookListScreen(
                                 menuOpen = false
                                 syncLogText = vm.syncLogText()
                                 showSyncLog = true
+                            })
+                            DropdownMenuItem(text = { Text("Storage location") }, onClick = {
+                                menuOpen = false; showStorageLocation = true
                             })
                             DropdownMenuItem(text = { Text("About") }, onClick = {
                                 menuOpen = false; showAbout = true
@@ -217,6 +222,15 @@ fun NotebookListScreen(
 
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 
+    if (showStorageLocation) {
+        StorageLocationDialog(
+            vm = vm,
+            onPickFolder = { showStorageLocation = false; onPickStorageFolder() },
+            onUseAppStorage = { showStorageLocation = false; vm.setStorageLocation(null) },
+            onDismiss = { showStorageLocation = false },
+        )
+    }
+
     if (showSyncLog) {
         SyncLogDialog(
             text = syncLogText,
@@ -252,6 +266,47 @@ private fun SyncLogDialog(
         dismissButton = {
             Row {
                 TextButton(onClick = onClear) { Text("Clear") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+    )
+}
+
+/** Lets the user pick a folder (outside the app's private storage) to keep documents in, or revert to it. */
+@Composable
+private fun StorageLocationDialog(
+    vm: AppViewModel,
+    onPickFolder: () -> Unit,
+    onUseAppStorage: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Storage location") },
+        text = {
+            Column {
+                Text("Notebooks are currently stored in:")
+                Text(
+                    vm.storageLocation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                )
+                Text(
+                    "Choosing a folder keeps your notebooks even if the app is " +
+                        "uninstalled - pick the same folder again afterwards to get them back. " +
+                        "Existing notebooks are copied there; the old copy is left in place.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onPickFolder) { Text("Choose folder…") }
+        },
+        dismissButton = {
+            Row {
+                if (vm.isCustomStorageLocation) {
+                    TextButton(onClick = onUseAppStorage) { Text("Use app storage") }
+                }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
         },

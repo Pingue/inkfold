@@ -318,16 +318,18 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     private suspend fun pushFiles(docId: String, folderId: String, token: String) {
         val remoteFiles = listFilesInFolder(folderId, token)
         val localFiles = repo.filesFor(docId)
-        val localNames = localFiles.map { it.name }.toSet()
+        val localNames = localFiles.mapNotNull { it.name }.toSet()
 
         for (file in localFiles) {
             currentCoroutineContext().ensureActive()
-            val mime = mimeFor(file.name)
-            val existing = remoteFiles[file.name]
+            val name = file.name ?: continue
+            val mime = mimeFor(name)
+            val content = repo.readFileText(file)
+            val existing = remoteFiles[name]
             if (existing != null) {
-                uploadMedia("$UPLOAD_API/files/$existing?uploadType=media&fields=id", "PATCH", token, file.readText(), mime)
+                uploadMedia("$UPLOAD_API/files/$existing?uploadType=media&fields=id", "PATCH", token, content, mime)
             } else {
-                createFileInFolder(folderId, file.name, file.readText(), mime, token)
+                createFileInFolder(folderId, name, content, mime, token)
             }
         }
         // Remove remote files for pages deleted locally.
@@ -349,7 +351,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         val remoteNames = remoteFiles.keys
         for (file in repo.filesFor(docId)) {
             currentCoroutineContext().ensureActive()
-            if (file.name !in remoteNames) file.delete()
+            if (file.name.let { it == null || it !in remoteNames }) file.delete()
         }
     }
 

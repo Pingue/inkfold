@@ -1,6 +1,7 @@
 package uk.co.mfrost.inkfold.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
@@ -40,6 +41,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var statusMessage by mutableStateOf<String?>(null)
 
+    /** Human-friendly description of where documents are currently stored, for the storage-location UI. */
+    var storageLocation by mutableStateOf("")
+        private set
+    var isCustomStorageLocation by mutableStateOf(false)
+        private set
+
     /**
      * The freshly-pulled remote version of the currently open document, when a
      * sync downloaded an update for it. The editor surfaces a prompt; the local
@@ -55,6 +62,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         refresh()
         refreshAccount()
+        refreshStorageInfo()
         startAutoSync()
         // Covers the case where the app is closed between in-app syncs; see
         // SyncWorker's doc comment for how it avoids racing this loop.
@@ -77,6 +85,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshAccount() {
         signedInEmail = driveSync.currentAccount()?.name
+    }
+
+    private fun refreshStorageInfo() {
+        storageLocation = repo.describeRoot()
+        isCustomStorageLocation = repo.hasCustomStorageLocation()
+    }
+
+    /**
+     * Switches where documents are stored: [treeUri] is a folder the user picked via
+     * the system folder picker, or null to switch back to the app's private storage.
+     * Existing notebooks are copied into the new location (see
+     * [DocumentRepository.moveStorageTo]) before the switch takes effect, and this
+     * takes the same lock as [sync]/[saveCurrent] so it can't race a write to the
+     * files it's copying.
+     */
+    fun setStorageLocation(treeUri: Uri?) = viewModelScope.launch {
+        statusMessage = "Moving notebooks…"
+        SyncCoordinator.exclusive { repo.moveStorageTo(treeUri) }
+        refreshStorageInfo()
+        currentPath = ""
+        folderContents = repo.listFolder(currentPath)
+        statusMessage = "Notebooks now stored in: $storageLocation"
     }
 
     /** Navigates into a subsection of the current folder. */

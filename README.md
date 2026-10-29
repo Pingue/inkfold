@@ -38,6 +38,11 @@ configured) signed release builds from CI can also be sideloaded directly.
   Conflicts resolve last-write-wins by modification time.
 - **Export** — save a notebook **PDF** to a chosen location via the system file
   picker, or share it; export each page as a **JPG**.
+- **Choosable storage location** — notebooks live in the app's private storage
+  by default, but a folder picked via "Storage location" in the menu is used
+  instead. Since that folder lives outside the app's private storage, its
+  contents survive an uninstall/reinstall (pick the same folder again
+  afterwards to get your notebooks back).
 - **Responsive** — a grid library on the home screen and a canvas that fits any
   screen, so it works on both phones and tablets.
 - **Light/dark theme**, with Material You dynamic colour on Android 12+.
@@ -59,6 +64,12 @@ configured) signed release builds from CI can also be sideloaded directly.
   stroke data (pressure, tool, colour) in `<metadata>`, so the app reloads it
   losslessly. This folder is also the offline cache. See `model/Notebook.kt`,
   `storage/DocumentRepository.kt`, and `drawing/SvgPage.kt`.
+- **Storage location.** By default the `documents` folder above lives under
+  the app's private storage (`Context.filesDir`), which Android erases on
+  uninstall. Picking a folder via "Storage location" in the menu instead
+  stores it there via the Storage Access Framework, so it's not tied to the
+  app's lifecycle. `DocumentRepository` reads/writes through `DocumentFile`
+  either way, so the rest of the app doesn't need to know which is active.
 - Drive access uses the Play Services `AuthorizationClient` API to grant the
   `drive.file` scope (a system account picker chooses the Google account, then
   a consent screen requests Drive access if it isn't already granted), and the
