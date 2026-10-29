@@ -164,6 +164,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearSyncLog() = driveSync.clearLog()
 
+    /** Drive folder (e.g. "Inkfold" or "Notes/Inkfold") notebooks currently sync into. */
+    fun syncFolderPath(): String = driveSync.syncFolderPath()
+
+    /** Changes the Drive sync folder and immediately syncs into it. */
+    fun setSyncFolderPath(path: String) {
+        driveSync.setSyncFolderPath(path)
+        if (driveSync.isSignedIn()) sync()
+    }
+
     /** Called once [DriveSync.authorize] (and any consent screen it triggered) succeeds. */
     fun onDriveAuthorized() {
         refreshAccount()
