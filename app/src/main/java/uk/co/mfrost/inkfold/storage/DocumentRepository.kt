@@ -84,7 +84,6 @@ class DocumentRepository(context: Context) {
      */
     private val corruptDir: File = File(context.filesDir, "corrupted-backups").apply { mkdirs() }
 
-
     private fun folderAt(sectionPath: String): File = if (sectionPath.isEmpty()) dir else File(dir, sectionPath)
 
     /** Searches the section tree for notebook [id]'s folder; falls back to the root for one not yet on disk. */
