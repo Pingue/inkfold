@@ -63,15 +63,20 @@ object Exporter {
                     page.width.toInt(), page.height.toInt(), index + 1
                 ).create()
                 val pdfPage = doc.startPage(pageInfo)
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
+                try {
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.STROKE
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                    }
+                    val path = Path()
+                    pdfPage.canvas.drawColor(Color.WHITE)
+                    drawPageContent(pdfPage.canvas, page, paint, path)
+                } finally {
+                    // Always finish the page, even on failure, so doc.close() below
+                    // never has to close a PdfDocument with a page left open.
+                    doc.finishPage(pdfPage)
                 }
-                val path = Path()
-                pdfPage.canvas.drawColor(Color.WHITE)
-                drawPageContent(pdfPage.canvas, page, paint, path)
-                doc.finishPage(pdfPage)
             }
             val out = File(exportsDir(context), "${sanitize(notebook.title)}.pdf")
             FileOutputStream(out).use { doc.writeTo(it) }

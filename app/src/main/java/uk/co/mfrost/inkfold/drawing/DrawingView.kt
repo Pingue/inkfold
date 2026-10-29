@@ -131,9 +131,11 @@ class DrawingView(context: Context) : View(context) {
     private val erasedThisGesture = mutableListOf<Stroke>()
 
     // ---- Undo / redo (ops remember which page they touched) ---------------
-    private sealed interface EditOp
-    private data class AddOp(val page: Page, val stroke: Stroke) : EditOp
-    private data class EraseOp(val page: Page, val strokes: List<Stroke>) : EditOp
+    private sealed interface EditOp {
+        val page: Page
+    }
+    private data class AddOp(override val page: Page, val stroke: Stroke) : EditOp
+    private data class EraseOp(override val page: Page, val strokes: List<Stroke>) : EditOp
 
     private val undoStack = ArrayDeque<EditOp>()
     private val redoStack = ArrayDeque<EditOp>()
@@ -164,7 +166,7 @@ class DrawingView(context: Context) : View(context) {
     fun undo() {
         val op = undoStack.removeLastOrNull() ?: return
         when (op) {
-            is AddOp -> op.page.strokes.remove(op.stroke)
+            is AddOp -> op.page.strokes.removeByReference(op.stroke)
             is EraseOp -> op.page.strokes.addAll(op.strokes)
         }
         redoStack.addLast(op)
@@ -176,7 +178,7 @@ class DrawingView(context: Context) : View(context) {
         val op = redoStack.removeLastOrNull() ?: return
         when (op) {
             is AddOp -> op.page.strokes.add(op.stroke)
-            is EraseOp -> op.page.strokes.removeAll(op.strokes.toSet())
+            is EraseOp -> op.page.strokes.removeAllByReference(op.strokes)
         }
         undoStack.addLast(op)
         onChanged?.invoke()
@@ -234,7 +236,11 @@ class DrawingView(context: Context) : View(context) {
     fun deleteFocusedPage() {
         if (notebook.pages.size <= 1) return
         val i = focusedPageIndex()
-        notebook.pages.removeAt(i)
+        val page = notebook.pages.removeAt(i)
+        // Otherwise a later undo/redo would silently edit a page that's no
+        // longer part of the notebook.
+        undoStack.removeAll { it.page === page }
+        redoStack.removeAll { it.page === page }
         recomputeLayout()
         clampPan()
         onChanged?.invoke()
@@ -644,10 +650,28 @@ class DrawingView(context: Context) : View(context) {
         val radius = settings.eraserSize / 2f
         val hit = pl.page.strokes.filter { strokeNear(it, lx, ly, radius) }
         if (hit.isNotEmpty()) {
-            pl.page.strokes.removeAll(hit.toSet())
+            pl.page.strokes.removeAllByReference(hit)
             erasedThisGesture.addAll(hit)
             invalidate()
         }
+    }
+
+    /**
+     * [Stroke] is a data class, so plain [MutableList.remove]/[removeAll] match
+     * any structurally-identical stroke (e.g. two single-dot taps of the same
+     * tool/colour/width at the same point) rather than the specific instance
+     * drawn or erased. These remove by reference instead, so undo/redo and
+     * object-erase always act on the exact stroke involved.
+     */
+    private fun MutableList<Stroke>.removeByReference(target: Stroke): Boolean {
+        val i = indexOfFirst { it === target }
+        if (i < 0) return false
+        removeAt(i)
+        return true
+    }
+
+    private fun MutableList<Stroke>.removeAllByReference(targets: Collection<Stroke>) {
+        for (t in targets) removeByReference(t)
     }
 
     private fun strokeNear(stroke: Stroke, px: Float, py: Float, radius: Float): Boolean {

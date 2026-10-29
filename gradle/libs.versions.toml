@@ -1,6 +1,6 @@
 [versions]
 agp = "9.2.0"
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 coreKtx = "1.19.0"
 lifecycle = "2.8.7"
 activityCompose = "1.9.3"
@@ -10,7 +10,7 @@ serialization = "1.11.0"
 playServicesAuth = "22.0.0"
 okhttp = "5.5.0"
 documentFile = "1.1.0"
-workManager = "2.10.0"
+workManager = "2.12.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
