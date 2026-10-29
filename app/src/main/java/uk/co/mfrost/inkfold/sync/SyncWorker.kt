@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Runs a Drive sync pass while the app is closed, via WorkManager's periodic
+ * Runs a cloud sync pass while the app is closed, via WorkManager's periodic
  * scheduler (see [SyncCoordinator.schedulePeriodicSync]).
  *
  * This complements, rather than replaces, [uk.co.mfrost.inkfold.ui.AppViewModel]'s own
@@ -20,8 +20,8 @@ import kotlinx.coroutines.withContext
  *
  * Two things this worker deliberately does NOT do, both because there's no UI
  * to do them from:
- *  - Interactively re-authenticate. If the stored Google session can't mint a
- *    token silently, the pass is treated as a transient failure; the next
+ *  - Interactively re-authenticate. If the stored session can't mint a token
+ *    silently, the pass is treated as a transient failure; the next
  *    foreground sync will surface the real sign-in prompt.
  *  - Reload a document that's open in the editor. Instead it skips entirely
  *    while the app is in the foreground (see [isAppInForeground]), leaving
@@ -39,9 +39,15 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         val repo = DocumentRepository(applicationContext)
         val driveSync = DriveSync(applicationContext, repo)
-        if (!driveSync.isSignedIn()) return Result.success()
+        val oneDriveSync = OneDriveSync(applicationContext, repo)
+        // Only one provider is ever the active, signed-in backend; see CloudSync's doc comment.
+        val cloud: CloudSync = when {
+            driveSync.isSignedIn() -> driveSync
+            oneDriveSync.isSignedIn() -> oneDriveSync
+            else -> return Result.success()
+        }
 
-        val result = SyncCoordinator.exclusive { driveSync.sync() }
+        val result = SyncCoordinator.exclusive { cloud.sync() }
         return when {
             result.error == null -> Result.success()
             runAttemptCount < MAX_ATTEMPTS -> Result.retry()

@@ -1,18 +1,22 @@
 package uk.co.mfrost.inkfold.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import uk.co.mfrost.inkfold.BuildConfig
 import uk.co.mfrost.inkfold.model.Notebook
 import uk.co.mfrost.inkfold.model.snapshot
 import uk.co.mfrost.inkfold.storage.DocumentRepository
 import uk.co.mfrost.inkfold.storage.FolderContents
 import uk.co.mfrost.inkfold.storage.SectionSummary
+import uk.co.mfrost.inkfold.sync.CloudSync
 import uk.co.mfrost.inkfold.sync.DriveSync
+import uk.co.mfrost.inkfold.sync.OneDriveSync
 import uk.co.mfrost.inkfold.sync.SyncCoordinator
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.Job
@@ -20,11 +24,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Drives the whole app: the notebook list, the open notebook, and Drive sync. */
+/** Drives the whole app: the notebook list, the open notebook, and cloud sync. */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val repo = DocumentRepository(app)
     val driveSync = DriveSync(app, repo)
+    val oneDriveSync = OneDriveSync(app, repo)
+
+    /**
+     * Drive and OneDrive are mutually exclusive: at most one is ever signed in
+     * at a time (enforced in [onDriveAuthorized]/[beginOneDriveSignIn]), since
+     * each maintains its own local<->remote baseline and a deletion on one
+     * remote would otherwise look like a local deletion to the other. This is
+     * whichever one currently is, or null if neither is signed in.
+     */
+    private fun activeCloud(): CloudSync? = when {
+        driveSync.isSignedIn() -> driveSync
+        oneDriveSync.isSignedIn() -> oneDriveSync
+        else -> null
+    }
+
+    private fun anySignedIn(): Boolean = driveSync.isSignedIn() || oneDriveSync.isSignedIn()
 
     /** Path (slash-separated, "" for the root) of the section currently browsed in the list screen. */
     var currentPath by mutableStateOf("")
@@ -35,6 +55,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var signedInEmail by mutableStateOf<String?>(null)
+        private set
+    var oneDriveAccountLabel by mutableStateOf<String?>(null)
         private set
     var syncing by mutableStateOf(false)
         private set
@@ -58,7 +80,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         startAutoSync()
         // Covers the case where the app is closed between in-app syncs; see
         // SyncWorker's doc comment for how it avoids racing this loop.
-        if (driveSync.isSignedIn()) SyncCoordinator.schedulePeriodicSync(app)
+        if (anySignedIn()) SyncCoordinator.schedulePeriodicSync(app)
     }
 
     /** Periodically syncs in the background while signed in (silent unless something changes). */
@@ -66,7 +88,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             while (isActive) {
                 delay(AUTO_SYNC_MS)
-                if (driveSync.isSignedIn()) sync(silent = true)
+                if (anySignedIn()) sync(silent = true)
             }
         }
     }
@@ -77,6 +99,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshAccount() {
         signedInEmail = driveSync.currentAccount()?.name
+        oneDriveAccountLabel = oneDriveSync.currentAccountLabel()
     }
 
     /** Navigates into a subsection of the current folder. */
@@ -121,7 +144,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         current?.let { nb -> SyncCoordinator.exclusive { repo.save(nb.snapshot()) } }
         current = null
         folderContents = repo.listFolder(currentPath)
-        if (driveSync.isSignedIn()) sync(silent = true)
+        if (anySignedIn()) sync(silent = true)
     }
 
     private var saveJob: Job? = null
@@ -154,8 +177,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun signOut() {
-        SyncCoordinator.cancelPeriodicSync(getApplication())
         driveSync.signOut()
+        if (!anySignedIn()) SyncCoordinator.cancelPeriodicSync(getApplication())
+        refreshAccount()
+    }
+
+    fun signOutOneDrive() {
+        oneDriveSync.signOut()
+        if (!anySignedIn()) SyncCoordinator.cancelPeriodicSync(getApplication())
         refreshAccount()
     }
 
@@ -166,6 +195,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Called once [DriveSync.authorize] (and any consent screen it triggered) succeeds. */
     fun onDriveAuthorized() {
+        if (oneDriveSync.isSignedIn()) oneDriveSync.signOut() // the two providers are mutually exclusive
         refreshAccount()
         statusMessage = "Signed in as $signedInEmail"
         SyncCoordinator.schedulePeriodicSync(getApplication())
@@ -189,13 +219,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         else -> "Drive sign-in failed: ${error?.message ?: "unknown error"}"
     }
 
+    /** Builds the OneDrive sign-in URL to open in a browser, or null if it isn't configured. */
+    fun beginOneDriveSignIn(): Uri? {
+        if (BuildConfig.ONEDRIVE_CLIENT_ID.isBlank()) {
+            statusMessage = "OneDrive sign-in isn't configured; see the README."
+            return null
+        }
+        if (driveSync.isSignedIn()) {
+            driveSync.signOut() // the two providers are mutually exclusive
+            refreshAccount()
+        }
+        return oneDriveSync.beginSignIn()
+    }
+
+    /** Called with the `uk.co.mfrost.inkfold://auth` redirect once the user approves OneDrive access. */
+    fun completeOneDriveSignIn(redirect: Uri) = viewModelScope.launch {
+        if (oneDriveSync.completeSignIn(redirect)) {
+            refreshAccount()
+            statusMessage = "Signed in as $oneDriveAccountLabel"
+            SyncCoordinator.schedulePeriodicSync(getApplication())
+            sync()
+        } else {
+            refreshAccount()
+            statusMessage = "OneDrive sign-in failed."
+        }
+    }
+
     fun sync(silent: Boolean = false) {
         if (syncing) return
+        val cloud = activeCloud() ?: run {
+            if (!silent) statusMessage = "Not signed in"
+            return
+        }
         viewModelScope.launch {
             syncing = true
             if (!silent) statusMessage = "Syncing…"
             // Shared with SyncWorker so a background pass never races this one.
-            val result = SyncCoordinator.exclusive { driveSync.sync() }
+            val result = SyncCoordinator.exclusive { cloud.sync() }
             syncing = false
             val changed = (result.uploaded + result.downloaded + result.deleted) > 0
             when {

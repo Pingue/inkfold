@@ -17,6 +17,18 @@ android {
         // build.yml; local/default builds keep these hardcoded values.
         versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 1
         versionName = project.findProperty("versionNameOverride") as String? ?: "1.0"
+
+        // Not a secret (Microsoft Entra application IDs are public identifiers; the
+        // PKCE auth code flow needs no client secret), but it's tied to a specific
+        // Azure app registration, so it's supplied at build time rather than
+        // hardcoded. Set it via a Gradle property (-PoneDriveClientId=... or
+        // oneDriveClientId=... in gradle.properties) or the ORG_GRADLE_PROJECT_oneDriveClientId
+        // env var, which Gradle maps to the property automatically. See the README.
+        buildConfigField(
+            "String",
+            "ONEDRIVE_CLIENT_ID",
+            "\"${project.findProperty("oneDriveClientId") ?: ""}\"",
+        )
     }
 
     // Release signing is driven by environment variables so the keystore stays
@@ -54,6 +66,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
@@ -91,5 +104,6 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.okhttp)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.browser)
     debugImplementation(libs.androidx.ui.tooling)
 }

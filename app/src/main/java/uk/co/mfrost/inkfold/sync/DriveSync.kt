@@ -36,18 +36,6 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Outcome of a sync pass, surfaced to the UI as a short status line. */
-data class SyncResult(
-    val uploaded: Int = 0,
-    val downloaded: Int = 0,
-    val deleted: Int = 0,
-    /** Document ids whose local copy was updated from Drive this pass. */
-    val downloadedIds: List<String> = emptyList(),
-    /** Document ids whose local copy was removed this pass (deleted on another device). */
-    val deletedIds: List<String> = emptyList(),
-    val error: String? = null,
-)
-
 /**
  * Two-way sync between the local document store and an "Inkfold" folder in the
  * user's Google Drive. Each document is a *sub-folder* (containing the
@@ -62,7 +50,7 @@ data class SyncResult(
  * flow, which play-services-auth 22 removes. See the README for the Google
  * Cloud OAuth setup required to enable sync.
  */
-class DriveSync(private val context: Context, private val repo: DocumentRepository) {
+class DriveSync(private val context: Context, private val repo: DocumentRepository) : CloudSync {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(HTTP_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
@@ -74,9 +62,9 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     private val log = SyncLog(context)
 
     /** Recent sync history, for the in-app "Sync log" view (see the issue about silent hangs/timeouts). */
-    fun logText(): String = log.read()
+    override fun logText(): String = log.read()
 
-    fun clearLog() = log.clear()
+    override fun clearLog() = log.clear()
 
     /** Intent for the system's Google account picker; consent is requested separately via [authorize]. */
     fun accountPickerIntent(): Intent =
@@ -93,7 +81,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         return Account(name, GOOGLE_ACCOUNT_TYPE)
     }
 
-    fun isSignedIn(): Boolean = currentAccount() != null
+    override fun isSignedIn(): Boolean = currentAccount() != null
 
     /**
      * Requests drive.file access for [account]. Returns a [PendingIntent] to launch
@@ -126,11 +114,11 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     }
 
     /** Forgets the locally-stored account; does not revoke the Drive grant on Google's side. */
-    fun signOut() {
+    override fun signOut() {
         prefs.edit { remove(KEY_ACCOUNT_NAME) }
     }
 
-    suspend fun sync(): SyncResult = withContext(Dispatchers.IO) {
+    override suspend fun sync(): SyncResult = withContext(Dispatchers.IO) {
         val account = currentAccount() ?: return@withContext SyncResult(error = "Not signed in")
 
         log.add("Sync started")
