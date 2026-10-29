@@ -249,7 +249,7 @@ fun EditorScreen(vm: AppViewModel) {
             title = { Text("Updated on another device") },
             text = {
                 Text(
-                    "This document was changed elsewhere and synced from Drive. " +
+                    "This document was changed elsewhere and synced. " +
                         "Reload the latest version? Changes you've made here since will be replaced."
                 )
             },
