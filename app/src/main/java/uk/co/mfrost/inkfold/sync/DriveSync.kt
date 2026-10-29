@@ -49,10 +49,11 @@ data class SyncResult(
 )
 
 /**
- * Two-way sync between the local document store and an "Inkfold" folder in the
- * user's Google Drive. Each document is a *sub-folder* (containing the
- * `index.inkfold` manifest and one SVG per page), tagged with the document id
- * and modification time in Drive appProperties. Conflicts resolve last-write-
+ * Two-way sync between the local document store and a folder (named "Inkfold"
+ * by default, but configurable via [syncFolderPath]) in the user's Google
+ * Drive. Each document is a *sub-folder* (containing the `index.inkfold`
+ * manifest and one SVG per page), tagged with the document id and
+ * modification time in Drive appProperties. Conflicts resolve last-write-
  * wins per document; the app is fully usable offline.
  *
  * Uses the drive.file scope (access only to files this app creates), granted
@@ -128,6 +129,15 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
     /** Forgets the locally-stored account; does not revoke the Drive grant on Google's side. */
     fun signOut() {
         prefs.edit { remove(KEY_ACCOUNT_NAME) }
+    }
+
+    /** Path (e.g. "Inkfold" or "Notes/Inkfold") of the Drive folder notebooks sync into. */
+    fun syncFolderPath(): String = prefs.getString(KEY_SYNC_FOLDER, ROOT_NAME) ?: ROOT_NAME
+
+    /** Updates the Drive folder notebooks sync into; blank resets it to the default. */
+    fun setSyncFolderPath(path: String) {
+        val cleaned = path.trim().trim('/').ifEmpty { ROOT_NAME }
+        prefs.edit { putString(KEY_SYNC_FOLDER, cleaned) }
     }
 
     suspend fun sync(): SyncResult = withContext(Dispatchers.IO) {
@@ -261,11 +271,23 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         continuation.invokeOnCancellation { thread.interrupt() }
     }
 
+    /** Finds (or creates) the configured [syncFolderPath], creating any missing segments along the way. */
     private suspend fun ensureRootFolder(token: String): String {
-        val q = "mimeType='$FOLDER_MIME' and name='$ROOT_NAME' and trashed=false"
+        val segments = syncFolderPath().split("/").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(ROOT_NAME) }
+        var parentId: String? = null
+        for (segment in segments) {
+            parentId = ensureFolder(segment, parentId, token)
+        }
+        return parentId!!
+    }
+
+    private suspend fun ensureFolder(name: String, parentId: String?, token: String): String {
+        val parentClause = if (parentId != null) " and '$parentId' in parents" else ""
+        val q = "mimeType='$FOLDER_MIME' and name='${escapeQueryValue(name)}' and trashed=false$parentClause"
         val body = get("$DRIVE_API/files?q=${enc(q)}&fields=files(id)&spaces=drive", token)
         JSONObject(body).optJSONArray("files")?.let { if (it.length() > 0) return it.getJSONObject(0).getString("id") }
-        val meta = JSONObject().put("name", ROOT_NAME).put("mimeType", FOLDER_MIME)
+        val meta = JSONObject().put("name", name).put("mimeType", FOLDER_MIME)
+        if (parentId != null) meta.put("parents", JSONArray().put(parentId))
         val created = post("$DRIVE_API/files?fields=id", token, meta.toString().toRequestBody(JSON_MEDIA))
         return JSONObject(created).getString("id")
     }
@@ -465,6 +487,9 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
+    /** Escapes a value for use inside a single-quoted Drive API query string. */
+    private fun escapeQueryValue(s: String) = s.replace("\\", "\\\\").replace("'", "\\'")
+
     /** Bridges a Play Services [Task] into a suspend call without pulling in kotlinx-coroutines-play-services. */
     private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->
         addOnSuccessListener { cont.resume(it) }
@@ -480,6 +505,7 @@ class DriveSync(private val context: Context, private val repo: DocumentReposito
         private const val GOOGLE_ACCOUNT_TYPE = "com.google"
         private const val PREFS_NAME = "drive_sync"
         private const val KEY_ACCOUNT_NAME = "account_name"
+        private const val KEY_SYNC_FOLDER = "sync_folder_path"
         private val JSON_MEDIA = "application/json; charset=UTF-8".toMediaType()
         private const val AUTH_TIMEOUT_MS = 30_000L
         private const val HTTP_CONNECT_TIMEOUT_MS = 15_000L

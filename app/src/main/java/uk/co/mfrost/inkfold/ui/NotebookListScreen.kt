@@ -71,6 +71,7 @@ fun NotebookListScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var showSyncLog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showSyncFolder by remember { mutableStateOf(false) }
     var syncLogText by remember { mutableStateOf("") }
 
     LaunchedEffect(vm.statusMessage) {
@@ -124,6 +125,9 @@ fun NotebookListScreen(
                                     menuOpen = false; onSignIn()
                                 })
                             }
+                            DropdownMenuItem(text = { Text("Sync folder") }, onClick = {
+                                menuOpen = false; showSyncFolder = true
+                            })
                             DropdownMenuItem(text = { Text("Sync log") }, onClick = {
                                 menuOpen = false
                                 syncLogText = vm.syncLogText()
@@ -216,6 +220,18 @@ fun NotebookListScreen(
     }
 
     if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+
+    if (showSyncFolder) {
+        TextPromptDialog(
+            title = "Sync folder",
+            initial = vm.syncFolderPath(),
+            confirmLabel = "Save",
+            onConfirm = { showSyncFolder = false; vm.setSyncFolderPath(it) },
+            onDismiss = { showSyncFolder = false },
+            description = "Folder in your Google Drive where notebooks are stored. " +
+                "Use \"/\" for a nested folder, e.g. \"Notes/Inkfold\".",
+        )
+    }
 
     if (showSyncLog) {
         SyncLogDialog(
@@ -392,17 +408,23 @@ fun TextPromptDialog(
     confirmLabel: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
+    description: String? = null,
 ) {
     var text by remember { mutableStateOf(initial) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            androidx.compose.material3.OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-            )
+            Column {
+                description?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                )
+            }
         },
         confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

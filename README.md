@@ -31,11 +31,13 @@ configured) signed release builds from CI can also be sideloaded directly.
   continuous scroll. Tap a Markdown page to edit it (`#` headings, `**bold**`,
   `*italic*`, `- bullets`, `` `code` ``).
 - **Undo / redo** for strokes and erases.
-- **Google Drive sync** — two-way sync to an `Inkfold` folder in your Drive,
-  backed by a local cache so the app works fully offline. Syncs automatically
-  every few minutes while the app is open (and on document close), plus a
-  periodic background sync via WorkManager while it's closed, plus on demand.
-  Conflicts resolve last-write-wins by modification time.
+- **Google Drive sync** — two-way sync to a folder in your Drive (`Inkfold` by
+  default, configurable from the account menu — "Sync folder" — to any path,
+  e.g. `Notes/Inkfold`), backed by a local cache so the app works fully
+  offline. Syncs automatically every few minutes while the app is open (and
+  on document close), plus a periodic background sync via WorkManager while
+  it's closed, plus on demand. Conflicts resolve last-write-wins by
+  modification time.
 - **Export** — save a notebook **PDF** to a chosen location via the system file
   picker, or share it; export each page as a **JPG**.
 - **Responsive** — a grid library on the home screen and a canvas that fits any
