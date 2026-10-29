@@ -90,10 +90,15 @@ private fun AppRoot(vm: AppViewModel = viewModel()) {
 
     val launchSignIn = { accountPickerLauncher.launch(vm.driveSync.accountPickerIntent()) }
 
+    val pickStorageFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) vm.setStorageLocation(uri) }
+
     if (vm.current == null) {
         NotebookListScreen(
             vm = vm,
             onSignIn = launchSignIn,
+            onPickStorageFolder = { pickStorageFolderLauncher.launch(null) },
         )
     } else {
         EditorScreen(vm = vm)
