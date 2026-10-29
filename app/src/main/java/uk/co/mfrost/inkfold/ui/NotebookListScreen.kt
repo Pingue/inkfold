@@ -70,6 +70,7 @@ fun NotebookListScreen(
     var moveTarget by remember { mutableStateOf<DocumentSummary?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var showSyncLog by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var syncLogText by remember { mutableStateOf("") }
 
     LaunchedEffect(vm.statusMessage) {
@@ -127,6 +128,9 @@ fun NotebookListScreen(
                                 menuOpen = false
                                 syncLogText = vm.syncLogText()
                                 showSyncLog = true
+                            })
+                            DropdownMenuItem(text = { Text("About") }, onClick = {
+                                menuOpen = false; showAbout = true
                             })
                         }
                     },
@@ -210,6 +214,8 @@ fun NotebookListScreen(
             onDismiss = { moveTarget = null },
         )
     }
+
+    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 
     if (showSyncLog) {
         SyncLogDialog(
