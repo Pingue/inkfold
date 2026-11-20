@@ -62,6 +62,7 @@ fun NotebookListScreen(
     vm: AppViewModel,
     onSignIn: () -> Unit,
     onPickStorageFolder: () -> Unit,
+    onSignInOneDrive: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -104,7 +105,11 @@ fun NotebookListScreen(
                     actions = {
                         IconButton(onClick = { vm.sync() }, enabled = !vm.syncing) {
                             Icon(
-                                if (vm.signedInEmail != null) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
+                                if (vm.signedInEmail != null || vm.oneDriveAccountLabel != null) {
+                                    Icons.Filled.CloudDone
+                                } else {
+                                    Icons.Filled.CloudOff
+                                },
                                 contentDescription = "Sync",
                             )
                         }
@@ -113,18 +118,34 @@ fun NotebookListScreen(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             val email = vm.signedInEmail
-                            if (email != null) {
-                                DropdownMenuItem(text = { Text(email, maxLines = 1) }, onClick = {})
-                                DropdownMenuItem(text = { Text("Sync now") }, onClick = {
-                                    menuOpen = false; vm.sync()
-                                })
-                                DropdownMenuItem(text = { Text("Sign out") }, onClick = {
-                                    menuOpen = false; vm.signOut()
-                                })
-                            } else {
-                                DropdownMenuItem(text = { Text("Sign in to Google Drive") }, onClick = {
-                                    menuOpen = false; onSignIn()
-                                })
+                            val oneDriveLabel = vm.oneDriveAccountLabel
+                            when {
+                                email != null -> {
+                                    DropdownMenuItem(text = { Text(email, maxLines = 1) }, onClick = {})
+                                    DropdownMenuItem(text = { Text("Sync now") }, onClick = {
+                                        menuOpen = false; vm.sync()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign out") }, onClick = {
+                                        menuOpen = false; vm.signOut()
+                                    })
+                                }
+                                oneDriveLabel != null -> {
+                                    DropdownMenuItem(text = { Text(oneDriveLabel, maxLines = 1) }, onClick = {})
+                                    DropdownMenuItem(text = { Text("Sync now") }, onClick = {
+                                        menuOpen = false; vm.sync()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign out") }, onClick = {
+                                        menuOpen = false; vm.signOutOneDrive()
+                                    })
+                                }
+                                else -> {
+                                    DropdownMenuItem(text = { Text("Sign in to Google Drive") }, onClick = {
+                                        menuOpen = false; onSignIn()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign in to OneDrive") }, onClick = {
+                                        menuOpen = false; onSignInOneDrive()
+                                    })
+                                }
                             }
                             DropdownMenuItem(text = { Text("Sync log") }, onClick = {
                                 menuOpen = false
