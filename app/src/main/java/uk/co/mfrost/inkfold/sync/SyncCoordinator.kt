@@ -15,8 +15,9 @@ import java.util.concurrent.TimeUnit
  * Single point of coordination between the foreground (in-app) sync loop and
  * the background [SyncWorker], so the two can never run at the same time.
  *
- * Both write the same local document files and the same tombstone baseline
- * ([DriveSync]'s `sync-state.json`); running two passes concurrently could
+ * Both write the same local document files and the active provider's own
+ * tombstone baseline ([DriveSync]'s `sync-state.json` or [OneDriveSync]'s
+ * `sync-state-onedrive.json`); running two passes concurrently could
  * interleave those writes and corrupt the baseline or a document. The mutex
  * is process-wide (in-memory), which is sufficient because WorkManager runs
  * its worker in this same app process, not a separate one.
