@@ -32,11 +32,13 @@ configured) signed release builds from CI can also be sideloaded directly.
   continuous scroll. Tap a Markdown page to edit it (`#` headings, `**bold**`,
   `*italic*`, `- bullets`, `` `code` ``).
 - **Undo / redo** for strokes and erases.
-- **Google Drive or Microsoft OneDrive sync** — two-way sync to an app-private
-  folder in your chosen cloud (only one is signed in at a time), backed by a
-  local cache so the app works fully offline. Syncs automatically every few
-  minutes while the app is open (and on document close), plus a periodic
-  background sync via WorkManager while it's closed, plus on demand.
+- **Google Drive or Microsoft OneDrive sync** — two-way sync to the chosen
+  cloud (only one is signed in at a time), backed by a local cache so the app
+  works fully offline. Google Drive defaults to an `Inkfold` folder; use
+  "Google Drive sync folder" in the account menu to configure a path such as
+  `Notes/Inkfold`. OneDrive uses an app-private folder. Syncs automatically
+  every few minutes while the app is open (and on document close), plus a
+  periodic background sync via WorkManager while it's closed, plus on demand.
   Conflicts resolve last-write-wins by modification time.
 - **Export** — save a notebook **PDF** to a chosen location via the system file
   picker, or share it; export each page as a **JPG**.
@@ -76,7 +78,8 @@ configured) signed release builds from CI can also be sideloaded directly.
   `drive.file` scope (a system account picker chooses the Google account, then
   a consent screen requests Drive access if it isn't already granted), and the
   Drive v3 REST API over OkHttp for sync itself. Each document is a sub-folder
-  of an `Inkfold` Drive folder; the app lists those sub-folders as documents.
+  of the configured Drive folder (default `Inkfold`); the app lists those
+  sub-folders as documents.
   The app can only see files it creates.
 - OneDrive access uses a standard OAuth 2.0 authorization-code-with-PKCE flow
   against the Microsoft identity platform (a Custom Tab for sign-in, no client
