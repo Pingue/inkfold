@@ -34,7 +34,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
             Column {
                 Text("Version ${version.name} (build ${version.code})", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "A pen-first note-taking app with Google Drive sync.",
+                    "A pen-first note-taking app with Google Drive and OneDrive sync.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text("MIT licence \u00b7 $REPO_URL", style = MaterialTheme.typography.bodySmall)

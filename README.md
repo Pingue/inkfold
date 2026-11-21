@@ -2,7 +2,8 @@
 
 A pen-first note-taking app for Android phones and tablets. Write with a stylus
 or your finger, organise notes into multi-page files, and sync everything to a
-folder in your Google Drive with a local cache for offline use.
+folder in your Google Drive or Microsoft OneDrive, with a local cache for
+offline use.
 
 This app is built with Google Play distribution in mind; the debug and (when
 configured) signed release builds from CI can also be sideloaded directly.
@@ -31,15 +32,21 @@ configured) signed release builds from CI can also be sideloaded directly.
   continuous scroll. Tap a Markdown page to edit it (`#` headings, `**bold**`,
   `*italic*`, `- bullets`, `` `code` ``).
 - **Undo / redo** for strokes and erases.
-- **Google Drive sync** — two-way sync to a folder in your Drive (`Inkfold` by
-  default, configurable from the account menu — "Sync folder" — to any path,
-  e.g. `Notes/Inkfold`), backed by a local cache so the app works fully
-  offline. Syncs automatically every few minutes while the app is open (and
-  on document close), plus a periodic background sync via WorkManager while
-  it's closed, plus on demand. Conflicts resolve last-write-wins by
-  modification time.
+- **Google Drive or Microsoft OneDrive sync** — two-way sync to the chosen
+  cloud (only one is signed in at a time), backed by a local cache so the app
+  works fully offline. Google Drive defaults to an `Inkfold` folder; use
+  "Google Drive sync folder" in the account menu to configure a path such as
+  `Notes/Inkfold`. OneDrive uses an app-private folder. Syncs automatically
+  every few minutes while the app is open (and on document close), plus a
+  periodic background sync via WorkManager while it's closed, plus on demand.
+  Conflicts resolve last-write-wins by modification time.
 - **Export** — save a notebook **PDF** to a chosen location via the system file
   picker, or share it; export each page as a **JPG**.
+- **Choosable storage location** — notebooks live in the app's private storage
+  by default, but a folder picked via "Storage location" in the menu is used
+  instead. Since that folder lives outside the app's private storage, its
+  contents survive an uninstall/reinstall (pick the same folder again
+  afterwards to get your notebooks back).
 - **Responsive** — a grid library on the home screen and a canvas that fits any
   screen, so it works on both phones and tablets.
 - **Light/dark theme**, with Material You dynamic colour on Android 12+.
@@ -61,12 +68,27 @@ configured) signed release builds from CI can also be sideloaded directly.
   stroke data (pressure, tool, colour) in `<metadata>`, so the app reloads it
   losslessly. This folder is also the offline cache. See `model/Notebook.kt`,
   `storage/DocumentRepository.kt`, and `drawing/SvgPage.kt`.
+- **Storage location.** By default the `documents` folder above lives under
+  the app's private storage (`Context.filesDir`), which Android erases on
+  uninstall. Picking a folder via "Storage location" in the menu instead
+  stores it there via the Storage Access Framework, so it's not tied to the
+  app's lifecycle. `DocumentRepository` reads/writes through `DocumentFile`
+  either way, so the rest of the app doesn't need to know which is active.
 - Drive access uses the Play Services `AuthorizationClient` API to grant the
   `drive.file` scope (a system account picker chooses the Google account, then
   a consent screen requests Drive access if it isn't already granted), and the
   Drive v3 REST API over OkHttp for sync itself. Each document is a sub-folder
-  of an `Inkfold` Drive folder; the app lists those sub-folders as documents.
+  of the configured Drive folder (default `Inkfold`); the app lists those
+  sub-folders as documents.
   The app can only see files it creates.
+- OneDrive access uses a standard OAuth 2.0 authorization-code-with-PKCE flow
+  against the Microsoft identity platform (a Custom Tab for sign-in, no client
+  secret stored in the app) to grant the `Files.ReadWrite.AppFolder` scope,
+  and the Microsoft Graph REST API over OkHttp for sync itself. Each document
+  is a sub-folder of the app's dedicated OneDrive "special" folder, which only
+  this app can see. Drive and OneDrive are mutually exclusive: signing into
+  one signs out of the other, since each keeps its own local<->remote sync
+  state.
 - Export uses Android's `PdfDocument` and `Bitmap` APIs. On-screen and exported
   rendering share one code path (`drawing/StrokeRenderer.kt`).
 
@@ -80,6 +102,7 @@ app/src/main/java/uk/co/mfrost/inkfold/
 │   └── SvgPage.kt             # page <-> self-describing SVG (round-trip)
 ├── storage/DocumentRepository.kt   # folder + SVG store / offline cache
 ├── sync/DriveSync.kt          # Google Drive folder-per-document sync
+├── sync/OneDriveSync.kt       # Microsoft OneDrive folder-per-document sync
 ├── export/Exporter.kt         # PDF + JPG export
 └── ui/                        # Compose screens, view model, theme
 ```
@@ -220,6 +243,48 @@ matching Android OAuth client in your Google Cloud project. Register the SHA-1
 of the exact keystore you installed from (see step 3 above) and add your
 account as a test user on the consent screen. Other codes: `12501` =
 cancelled, `7` = network error.
+
+## Enabling OneDrive sync
+
+OneDrive sync is a separate, optional backend to Drive (only one can be signed
+in at a time). Unlike Drive, enabling it requires a build-time app ID, because
+Microsoft identity platform apps are identified by an application ID rather
+than by the APK's signing certificate.
+
+1. In the [Azure Portal](https://portal.azure.com/) go to **Microsoft Entra ID
+   → App registrations → New registration**.
+   - **Name:** anything, e.g. "Inkfold".
+   - **Supported account types:** "Accounts in any organizational directory
+     and personal Microsoft accounts" (so both personal OneDrive and
+     OneDrive for Business work).
+   - Leave the redirect URI blank here; it's added in the next step.
+2. Open the new app registration's **Authentication** page → **Add a
+   platform → Mobile and desktop applications**, and add this exact custom
+   redirect URI:
+   ```
+   uk.co.mfrost.inkfold://auth
+   ```
+3. Open **API permissions → Add a permission → Microsoft Graph → Delegated
+   permissions**, and add `Files.ReadWrite.AppFolder` and `offline_access`
+   (`User.Read` is included by default). No admin consent is needed for these
+   for personal use.
+4. Copy the **Application (client) ID** from the registration's **Overview**
+   page.
+5. Supply it to the build as a Gradle property (not committed to the repo —
+   it isn't secret, but it's tied to your own app registration):
+   ```bash
+   echo "oneDriveClientId=<your-client-id>" >> ~/.gradle/gradle.properties
+   ```
+   or pass it directly: `./gradlew assembleDebug -PoneDriveClientId=<your-client-id>`.
+   (Gradle also recognises the `ORG_GRADLE_PROJECT_oneDriveClientId` environment
+   variable, which is handy for CI.)
+6. Rebuild and install the app, open the overflow menu on the home screen, and
+   choose **Sign in to OneDrive**. This opens a browser tab to sign in and
+   consent; it redirects back into the app to finish.
+
+No client secret is stored in the app or the repo: this is a public client
+using the PKCE authorization code flow, so the client ID alone (not secret by
+itself) is all that's needed.
 
 ## Notes & limitations
 

@@ -61,6 +61,8 @@ import java.util.Date
 fun NotebookListScreen(
     vm: AppViewModel,
     onSignIn: () -> Unit,
+    onPickStorageFolder: () -> Unit,
+    onSignInOneDrive: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -72,6 +74,7 @@ fun NotebookListScreen(
     var showSyncLog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showSyncFolder by remember { mutableStateOf(false) }
+    var showStorageLocation by remember { mutableStateOf(false) }
     var syncLogText by remember { mutableStateOf("") }
 
     LaunchedEffect(vm.statusMessage) {
@@ -103,7 +106,11 @@ fun NotebookListScreen(
                     actions = {
                         IconButton(onClick = { vm.sync() }, enabled = !vm.syncing) {
                             Icon(
-                                if (vm.signedInEmail != null) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
+                                if (vm.signedInEmail != null || vm.oneDriveAccountLabel != null) {
+                                    Icons.Filled.CloudDone
+                                } else {
+                                    Icons.Filled.CloudOff
+                                },
                                 contentDescription = "Sync",
                             )
                         }
@@ -112,26 +119,45 @@ fun NotebookListScreen(
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             val email = vm.signedInEmail
-                            if (email != null) {
-                                DropdownMenuItem(text = { Text(email, maxLines = 1) }, onClick = {})
-                                DropdownMenuItem(text = { Text("Sync now") }, onClick = {
-                                    menuOpen = false; vm.sync()
-                                })
-                                DropdownMenuItem(text = { Text("Sign out") }, onClick = {
-                                    menuOpen = false; vm.signOut()
-                                })
-                            } else {
-                                DropdownMenuItem(text = { Text("Sign in to Google Drive") }, onClick = {
-                                    menuOpen = false; onSignIn()
-                                })
+                            val oneDriveLabel = vm.oneDriveAccountLabel
+                            when {
+                                email != null -> {
+                                    DropdownMenuItem(text = { Text(email, maxLines = 1) }, onClick = {})
+                                    DropdownMenuItem(text = { Text("Sync now") }, onClick = {
+                                        menuOpen = false; vm.sync()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign out") }, onClick = {
+                                        menuOpen = false; vm.signOut()
+                                    })
+                                }
+                                oneDriveLabel != null -> {
+                                    DropdownMenuItem(text = { Text(oneDriveLabel, maxLines = 1) }, onClick = {})
+                                    DropdownMenuItem(text = { Text("Sync now") }, onClick = {
+                                        menuOpen = false; vm.sync()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign out") }, onClick = {
+                                        menuOpen = false; vm.signOutOneDrive()
+                                    })
+                                }
+                                else -> {
+                                    DropdownMenuItem(text = { Text("Sign in to Google Drive") }, onClick = {
+                                        menuOpen = false; onSignIn()
+                                    })
+                                    DropdownMenuItem(text = { Text("Sign in to OneDrive") }, onClick = {
+                                        menuOpen = false; onSignInOneDrive()
+                                    })
+                                }
                             }
-                            DropdownMenuItem(text = { Text("Sync folder") }, onClick = {
+                            DropdownMenuItem(text = { Text("Google Drive sync folder") }, onClick = {
                                 menuOpen = false; showSyncFolder = true
                             })
                             DropdownMenuItem(text = { Text("Sync log") }, onClick = {
                                 menuOpen = false
                                 syncLogText = vm.syncLogText()
                                 showSyncLog = true
+                            })
+                            DropdownMenuItem(text = { Text("Storage location") }, onClick = {
+                                menuOpen = false; showStorageLocation = true
                             })
                             DropdownMenuItem(text = { Text("About") }, onClick = {
                                 menuOpen = false; showAbout = true
@@ -223,13 +249,22 @@ fun NotebookListScreen(
 
     if (showSyncFolder) {
         TextPromptDialog(
-            title = "Sync folder",
+            title = "Google Drive sync folder",
             initial = vm.syncFolderPath(),
             confirmLabel = "Save",
             onConfirm = { showSyncFolder = false; vm.setSyncFolderPath(it) },
             onDismiss = { showSyncFolder = false },
             description = "Folder in your Google Drive where notebooks are stored. " +
                 "Use \"/\" for a nested folder, e.g. \"Notes/Inkfold\".",
+        )
+    }
+
+    if (showStorageLocation) {
+        StorageLocationDialog(
+            vm = vm,
+            onPickFolder = { showStorageLocation = false; onPickStorageFolder() },
+            onUseAppStorage = { showStorageLocation = false; vm.setStorageLocation(null) },
+            onDismiss = { showStorageLocation = false },
         )
     }
 
@@ -268,6 +303,47 @@ private fun SyncLogDialog(
         dismissButton = {
             Row {
                 TextButton(onClick = onClear) { Text("Clear") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
+    )
+}
+
+/** Lets the user pick a folder (outside the app's private storage) to keep documents in, or revert to it. */
+@Composable
+private fun StorageLocationDialog(
+    vm: AppViewModel,
+    onPickFolder: () -> Unit,
+    onUseAppStorage: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Storage location") },
+        text = {
+            Column {
+                Text("Notebooks are currently stored in:")
+                Text(
+                    vm.storageLocation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                )
+                Text(
+                    "Choosing a folder keeps your notebooks even if the app is " +
+                        "uninstalled - pick the same folder again afterwards to get them back. " +
+                        "Existing notebooks are copied there; the old copy is left in place.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onPickFolder) { Text("Choose folder…") }
+        },
+        dismissButton = {
+            Row {
+                if (vm.isCustomStorageLocation) {
+                    TextButton(onClick = onUseAppStorage) { Text("Use app storage") }
+                }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
         },
