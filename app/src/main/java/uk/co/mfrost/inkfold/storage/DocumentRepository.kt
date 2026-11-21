@@ -1,6 +1,10 @@
 package uk.co.mfrost.inkfold.storage
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
+import androidx.documentfile.provider.DocumentFile
 import uk.co.mfrost.inkfold.drawing.SvgPage
 import uk.co.mfrost.inkfold.model.DocumentManifest
 import uk.co.mfrost.inkfold.model.Notebook
@@ -48,7 +52,7 @@ private data class SectionMeta(
 /**
  * Owns the on-device document store and doubles as the offline cache for Drive.
  *
- * Each document is a *folder* under the app's private files directory:
+ * Each document is a *folder*:
  *
  * ```
  * documents/<id>/
@@ -59,15 +63,23 @@ private data class SectionMeta(
  * Notebooks can additionally be filed into *sections* - plain subfolders
  * (anywhere in the tree, nestable) marked with a small `section.inkfold`
  * metadata file holding just a display title. A notebook's folder name is
- * still its id, so [folderFor] finds it by searching the section tree rather
- * than assuming it's directly under the root. Sections are a local-only
+ * still its id, so [existingFolderFor] finds it by searching the section tree
+ * rather than assuming it's directly under the root. Sections are a local-only
  * browsing aid, not synced to Drive: [DriveSync] only ever deals with
  * notebooks (via [list]/[filesFor]/[writeFile], all keyed by id), so a
  * notebook downloaded fresh from Drive always lands at the top level - the
  * section tree itself isn't part of what's backed up or shared between
  * devices.
+ *
+ * The store normally lives in the app's private storage, which Android erases
+ * on uninstall. [Prefs.storageTreeUri] can instead point [root] at a folder
+ * the user picked via the system folder picker (see [moveStorageTo]): since
+ * that folder lives outside the app's private storage, its contents survive
+ * an uninstall/reinstall, and can be re-attached by picking the same folder
+ * again after reinstalling. Both cases are read through [DocumentFile] so the
+ * rest of this class doesn't need to know which one is active.
  */
-class DocumentRepository(context: Context) {
+class DocumentRepository(private val context: Context) {
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -75,45 +87,140 @@ class DocumentRepository(context: Context) {
         prettyPrint = true
     }
 
-    val dir: File = File(context.filesDir, "documents").apply { mkdirs() }
+    private val prefs = Prefs(context)
 
-    private fun folderAt(sectionPath: String): File = if (sectionPath.isEmpty()) dir else File(dir, sectionPath)
+    private fun defaultRoot(): DocumentFile =
+        DocumentFile.fromFile(File(context.filesDir, "documents").apply { mkdirs() })
 
-    /** Searches the section tree for notebook [id]'s folder; falls back to the root for one not yet on disk. */
-    fun folderFor(id: String): File = locate(dir, id) ?: File(dir, id)
+    /** The active storage root: a user-chosen folder if one is set and still accessible, else the app's private store. */
+    private val root: DocumentFile
+        get() {
+            val uri = prefs.storageTreeUri?.let(Uri::parse) ?: return defaultRoot()
+            val hasPermission = context.contentResolver.persistedUriPermissions
+                .any { it.uri == uri && it.isWritePermission }
+            val tree = if (hasPermission) DocumentFile.fromTreeUri(context, uri)?.takeIf { it.exists() } else null
+            if (tree != null) return tree
+            // The permission was revoked, or the folder was moved/deleted outside the
+            // app - fall back to the private store rather than silently losing access
+            // to every document.
+            prefs.storageTreeUri = null
+            return defaultRoot()
+        }
 
-    private fun locate(folder: File, id: String): File? {
-        val candidate = File(folder, id)
-        if (candidate.isDirectory && File(candidate, MANIFEST).exists()) return candidate
-        for (child in folder.listFiles { f -> f.isDirectory } ?: emptyArray()) {
-            if (File(child, SECTION_META).exists()) locate(child, id)?.let { return it }
+    /** Human-friendly description of the active storage root, for the storage-location UI. */
+    fun describeRoot(): String {
+        val uri = prefs.storageTreeUri ?: return "App storage (removed if the app is uninstalled)"
+        val docId = runCatching { DocumentsContract.getTreeDocumentId(Uri.parse(uri)) }.getOrNull()
+        val (volume, path) = docId?.split(":", limit = 2)?.let { it.getOrNull(0) to it.getOrNull(1) } ?: (null to null)
+        val volumeLabel = if (volume == "primary") "Internal storage" else volume ?: "Chosen folder"
+        return if (path.isNullOrEmpty()) volumeLabel else "$volumeLabel/$path"
+    }
+
+    fun hasCustomStorageLocation(): Boolean = prefs.storageTreeUri != null
+
+    /**
+     * Switches the storage root to [newTreeUri] (or back to the app-private store
+     * if null), copying every existing section/notebook into it first so nothing
+     * already on disk goes missing. The previous location is left untouched (not
+     * deleted), so switching is always safe to retry or reverse.
+     */
+    suspend fun moveStorageTo(newTreeUri: Uri?) = withContext(Dispatchers.IO) {
+        val oldRoot = root
+        val oldTreeUri = prefs.storageTreeUri
+        if (newTreeUri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                newTreeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        val newRoot = newTreeUri?.let { DocumentFile.fromTreeUri(context, it) } ?: defaultRoot()
+        if (oldRoot.uri != newRoot.uri) {
+            for (child in oldRoot.listFiles()) copyTree(child, newRoot, child.name ?: continue)
+        }
+        prefs.storageTreeUri = newTreeUri?.toString()
+        if (oldTreeUri != null && oldTreeUri != newTreeUri?.toString()) {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(oldTreeUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+    }
+
+    /** Recursively copies [src] (a file or a whole subtree) into [destParent], as [name]. */
+    private fun copyTree(src: DocumentFile, destParent: DocumentFile, name: String) {
+        if (src.isDirectory) {
+            val dest = destParent.findFile(name) ?: destParent.createDirectory(name) ?: return
+            for (child in src.listFiles()) copyTree(child, dest, child.name ?: continue)
+        } else {
+            val dest = destParent.createFile(OCTET_STREAM, name) ?: return
+            context.contentResolver.openInputStream(src.uri)?.use { input ->
+                context.contentResolver.openOutputStream(dest.uri, "wt")?.use { output -> input.copyTo(output) }
+            }
+        }
+    }
+
+    private fun readText(file: DocumentFile): String =
+        context.contentResolver.openInputStream(file.uri)?.bufferedReader()?.use { it.readText() } ?: ""
+
+    private fun writeText(file: DocumentFile, text: String) {
+        context.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+    }
+
+    /** Writes [text] to a child of this folder named [name], creating it if it doesn't exist yet. */
+    private fun DocumentFile.writeChild(name: String, text: String) {
+        val file = findFile(name) ?: createFile(OCTET_STREAM, name) ?: error("Couldn't create $name")
+        writeText(file, text)
+    }
+
+    private fun folderAt(sectionPath: String): DocumentFile =
+        if (sectionPath.isEmpty()) root
+        else sectionPath.split('/').fold(root) { parent, name -> parent.findFile(name) ?: parent }
+
+    /** Searches the section tree for notebook [id]'s folder; null if it doesn't exist on disk. */
+    private fun existingFolderFor(id: String): DocumentFile? = locate(root, id)
+
+    private fun locate(folder: DocumentFile, id: String): DocumentFile? {
+        val candidate = folder.findFile(id)
+        if (candidate != null && candidate.isDirectory && candidate.findFile(MANIFEST) != null) return candidate
+        for (child in folder.listFiles()) {
+            if (child.isDirectory && child.findFile(SECTION_META) != null) {
+                locate(child, id)?.let { return it }
+            }
         }
         return null
     }
 
-    private fun manifestFile(id: String): File = File(folderFor(id), MANIFEST)
+    /** Like [existingFolderFor], creating a top-level folder named [id] if none exists yet. */
+    private fun folderFor(id: String): DocumentFile =
+        existingFolderFor(id) ?: root.createDirectory(id) ?: error("Couldn't create notebook folder")
 
     /** All files that make up a document on disk (manifest + page files). */
-    fun filesFor(id: String): List<File> =
-        folderFor(id).listFiles()?.filter { it.isFile } ?: emptyList()
+    fun filesFor(id: String): List<DocumentFile> =
+        existingFolderFor(id)?.listFiles()?.filter { it.isFile } ?: emptyList()
+
+    /** Reads a file's full text content; used by [DriveSync] when pushing local files. */
+    fun readFileText(file: DocumentFile): String = readText(file)
 
     /** Every notebook anywhere in the section tree, flattened - what [DriveSync] reconciles against. */
     suspend fun list(): List<DocumentSummary> = withContext(Dispatchers.IO) {
         val out = mutableListOf<DocumentSummary>()
-        fun walk(folder: File) {
-            for (child in folder.listFiles { f -> f.isDirectory } ?: emptyArray()) {
-                val mf = File(child, MANIFEST)
-                if (mf.exists()) {
+        fun walk(folder: DocumentFile) {
+            for (child in folder.listFiles()) {
+                if (!child.isDirectory) continue
+                val mf = child.findFile(MANIFEST)
+                if (mf != null) {
                     runCatching {
-                        val m = json.decodeFromString(DocumentManifest.serializer(), mf.readText())
+                        val m = json.decodeFromString(DocumentManifest.serializer(), readText(mf))
                         out.add(DocumentSummary(m.id, m.title, m.pages.size, m.updatedAt))
                     }
-                } else if (File(child, SECTION_META).exists()) {
+                } else if (child.findFile(SECTION_META) != null) {
                     walk(child)
                 }
             }
         }
-        walk(dir)
+        walk(root)
         out.sortedByDescending { it.updatedAt }
     }
 
@@ -121,19 +228,21 @@ class DocumentRepository(context: Context) {
     suspend fun listFolder(sectionPath: String): FolderContents = withContext(Dispatchers.IO) {
         val sections = mutableListOf<SectionSummary>()
         val notebooks = mutableListOf<DocumentSummary>()
-        for (child in folderAt(sectionPath).listFiles { f -> f.isDirectory } ?: emptyArray()) {
-            val sectionMeta = File(child, SECTION_META)
-            val manifest = File(child, MANIFEST)
+        for (child in folderAt(sectionPath).listFiles()) {
+            if (!child.isDirectory) continue
+            val sectionMeta = child.findFile(SECTION_META)
+            val manifest = child.findFile(MANIFEST)
+            val childName = child.name ?: continue
             when {
-                sectionMeta.exists() -> {
+                sectionMeta != null -> {
                     val meta = runCatching {
-                        json.decodeFromString(SectionMeta.serializer(), sectionMeta.readText())
+                        json.decodeFromString(SectionMeta.serializer(), readText(sectionMeta))
                     }.getOrNull()
-                    val childPath = if (sectionPath.isEmpty()) child.name else "$sectionPath/${child.name}"
-                    sections.add(SectionSummary(childPath, meta?.title ?: child.name))
+                    val childPath = if (sectionPath.isEmpty()) childName else "$sectionPath/$childName"
+                    sections.add(SectionSummary(childPath, meta?.title ?: childName))
                 }
-                manifest.exists() -> runCatching {
-                    val m = json.decodeFromString(DocumentManifest.serializer(), manifest.readText())
+                manifest != null -> runCatching {
+                    val m = json.decodeFromString(DocumentManifest.serializer(), readText(manifest))
                     notebooks.add(DocumentSummary(m.id, m.title, m.pages.size, m.updatedAt))
                 }
             }
@@ -147,71 +256,72 @@ class DocumentRepository(context: Context) {
     /** Every section anywhere in the tree, for a "move to section" picker. */
     suspend fun allSections(): List<SectionSummary> = withContext(Dispatchers.IO) {
         val out = mutableListOf<SectionSummary>()
-        fun walk(folder: File, path: String) {
-            for (child in folder.listFiles { f -> f.isDirectory } ?: emptyArray()) {
-                val sectionMeta = File(child, SECTION_META)
-                if (sectionMeta.exists()) {
-                    val meta = runCatching {
-                        json.decodeFromString(SectionMeta.serializer(), sectionMeta.readText())
-                    }.getOrNull()
-                    val childPath = if (path.isEmpty()) child.name else "$path/${child.name}"
-                    out.add(SectionSummary(childPath, meta?.title ?: child.name))
-                    walk(child, childPath)
-                }
+        fun walk(folder: DocumentFile, path: String) {
+            for (child in folder.listFiles()) {
+                if (!child.isDirectory) continue
+                val sectionMeta = child.findFile(SECTION_META) ?: continue
+                val childName = child.name ?: continue
+                val meta = runCatching {
+                    json.decodeFromString(SectionMeta.serializer(), readText(sectionMeta))
+                }.getOrNull()
+                val childPath = if (path.isEmpty()) childName else "$path/$childName"
+                out.add(SectionSummary(childPath, meta?.title ?: childName))
+                walk(child, childPath)
             }
         }
-        walk(dir, "")
+        walk(root, "")
         out.sortedBy { it.path.lowercase() }
     }
 
     suspend fun createSection(title: String, parentPath: String = ""): SectionSummary = withContext(Dispatchers.IO) {
-        val parent = folderAt(parentPath).apply { mkdirs() }
+        val parent = folderAt(parentPath)
         val name = uniqueFolderName(parent, sanitizeFolderName(title))
-        val folder = File(parent, name).apply { mkdirs() }
-        File(folder, SECTION_META).writeText(json.encodeToString(SectionMeta.serializer(), SectionMeta(title)))
+        val folder = parent.createDirectory(name) ?: error("Couldn't create section")
+        folder.writeChild(SECTION_META, json.encodeToString(SectionMeta.serializer(), SectionMeta(title)))
         SectionSummary(if (parentPath.isEmpty()) name else "$parentPath/$name", title)
     }
 
     /** Moves notebook [id] so it's filed directly under [toSectionPath] ("" for the top level). */
     suspend fun moveNotebook(id: String, toSectionPath: String) = withContext(Dispatchers.IO) {
-        val current = folderFor(id)
-        val target = File(folderAt(toSectionPath).apply { mkdirs() }, id)
-        if (current.exists() && current.absolutePath != target.absolutePath) current.renameTo(target)
+        val current = existingFolderFor(id) ?: return@withContext
+        val target = folderAt(toSectionPath)
+        if (current.parentFile?.uri != target.uri) {
+            copyTree(current, target, id)
+            current.delete()
+        }
         Unit
     }
 
     private fun sanitizeFolderName(title: String): String =
         title.trim().replace(Regex("[/\\\\:*?\"<>|]"), "_").ifBlank { "Untitled" }
 
-    private fun uniqueFolderName(parent: File, base: String): String {
-        if (!File(parent, base).exists()) return base
+    private fun uniqueFolderName(parent: DocumentFile, base: String): String {
+        if (parent.findFile(base) == null) return base
         var n = 2
-        while (File(parent, "$base ($n)").exists()) n++
+        while (parent.findFile("$base ($n)") != null) n++
         return "$base ($n)"
     }
 
     suspend fun load(id: String): Notebook? = withContext(Dispatchers.IO) {
-        val mf = manifestFile(id)
-        if (!mf.exists()) return@withContext null
+        val folder = existingFolderFor(id) ?: return@withContext null
+        val mf = folder.findFile(MANIFEST) ?: return@withContext null
         val manifest = runCatching {
-            json.decodeFromString(DocumentManifest.serializer(), mf.readText())
+            json.decodeFromString(DocumentManifest.serializer(), readText(mf))
         }.getOrNull() ?: return@withContext null
 
-        val folder = folderFor(id)
         val pages = manifest.pages.map { ref ->
-            val pf = File(folder, ref.file)
-            val exists = pf.exists()
+            val pf = folder.findFile(ref.file)
             when (ref.type) {
                 PageType.MARKDOWN -> Page(
                     id = ref.id,
                     orientation = ref.orientation,
                     type = PageType.MARKDOWN,
-                    markdown = if (exists) pf.readText() else "",
+                    markdown = pf?.let { readText(it) } ?: "",
                 )
                 PageType.SVG -> Page(
                     id = ref.id,
                     orientation = ref.orientation,
-                    strokes = if (exists) SvgPage.parseStrokes(pf.readText()) else mutableListOf(),
+                    strokes = pf?.let { SvgPage.parseStrokes(readText(it)) } ?: mutableListOf(),
                     type = PageType.SVG,
                 )
             }
@@ -229,20 +339,19 @@ class DocumentRepository(context: Context) {
         saveToFolder(notebook, folderFor(notebook.id))
     }
 
-    private fun saveToFolder(notebook: Notebook, folder: File) {
-        folder.mkdirs()
+    private fun saveToFolder(notebook: Notebook, folder: DocumentFile) {
         notebook.updatedAt = System.currentTimeMillis()
 
         val refs = notebook.pages.map { page ->
             when (page.type) {
                 PageType.MARKDOWN -> {
                     val file = "${page.id}.md"
-                    File(folder, file).writeText(page.markdown)
+                    folder.writeChild(file, page.markdown)
                     PageRef(id = page.id, type = PageType.MARKDOWN, file = file, orientation = page.orientation)
                 }
                 PageType.SVG -> {
                     val file = "${page.id}.svg"
-                    File(folder, file).writeText(SvgPage.toSvg(page))
+                    folder.writeChild(file, SvgPage.toSvg(page))
                     PageRef(id = page.id, type = PageType.SVG, file = file, orientation = page.orientation)
                 }
             }
@@ -254,29 +363,30 @@ class DocumentRepository(context: Context) {
             updatedAt = notebook.updatedAt,
             pages = refs,
         )
-        File(folder, MANIFEST).writeText(json.encodeToString(DocumentManifest.serializer(), manifest))
+        folder.writeChild(MANIFEST, json.encodeToString(DocumentManifest.serializer(), manifest))
 
         // Drop files for pages that no longer exist.
         val keep = refs.map { it.file }.toMutableSet().apply { add(MANIFEST) }
-        folder.listFiles()?.forEach { if (it.isFile && it.name !in keep) it.delete() }
+        for (f in folder.listFiles()) if (f.isFile && f.name.let { it == null || it !in keep }) f.delete()
     }
 
     /** Creates a notebook directly inside [sectionPath] ("" for the top level). */
     suspend fun create(title: String, sectionPath: String = ""): Notebook = withContext(Dispatchers.IO) {
         val nb = Notebook(title = title.ifBlank { "Untitled" })
-        saveToFolder(nb, File(folderAt(sectionPath), nb.id))
+        val folder = folderAt(sectionPath).createDirectory(nb.id) ?: error("Couldn't create notebook folder")
+        saveToFolder(nb, folder)
         nb
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        folderFor(id).deleteRecursively()
+        existingFolderFor(id)?.delete()
         Unit
     }
 
     // ---- Helpers for the Drive sync layer ---------------------------------
 
     fun manifestText(id: String): String? =
-        manifestFile(id).takeIf { it.exists() }?.readText()
+        existingFolderFor(id)?.findFile(MANIFEST)?.let { readText(it) }
 
     fun readManifest(id: String): DocumentManifest? =
         manifestText(id)?.let {
@@ -284,12 +394,14 @@ class DocumentRepository(context: Context) {
         }
 
     fun writeFile(id: String, name: String, content: String) {
-        val folder = folderFor(id).apply { mkdirs() }
-        File(folder, name).writeText(content)
+        folderFor(id).writeChild(name, content)
     }
 
     companion object {
         const val MANIFEST = "index.inkfold"
         private const val SECTION_META = "section.inkfold"
+
+        /** A MIME type with no registered file extension, so [DocumentFile.createFile] never mangles our names. */
+        private const val OCTET_STREAM = "application/octet-stream"
     }
 }

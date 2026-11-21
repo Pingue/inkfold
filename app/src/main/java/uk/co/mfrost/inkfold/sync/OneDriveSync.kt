@@ -287,11 +287,12 @@ class OneDriveSync(context: Context, private val repo: DocumentRepository) : Clo
     private suspend fun pushFiles(docId: String, token: String) {
         val remoteNames = listFilesInFolder(docId, token)
         val localFiles = repo.filesFor(docId)
-        val localNames = localFiles.map { it.name }.toSet()
+        val localNames = localFiles.mapNotNull { it.name }.toSet()
 
         for (file in localFiles) {
             currentCoroutineContext().ensureActive()
-            uploadContent(docId, file.name, file.readText(), mimeFor(file.name), token)
+            val name = file.name ?: continue
+            uploadContent(docId, name, repo.readFileText(file), mimeFor(name), token)
         }
         // Remove remote files for pages deleted locally.
         for (name in remoteNames) {

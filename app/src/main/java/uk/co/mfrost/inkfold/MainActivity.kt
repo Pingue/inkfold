@@ -127,6 +127,10 @@ private fun AppRoot(
 
     val launchSignIn = { accountPickerLauncher.launch(vm.driveSync.accountPickerIntent()) }
 
+    val pickStorageFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) vm.setStorageLocation(uri) }
+
     val launchOneDriveSignIn: () -> Unit = {
         vm.beginOneDriveSignIn()?.let { authUri ->
             CustomTabsIntent.Builder().build().launchUrl(context, authUri)
@@ -137,6 +141,7 @@ private fun AppRoot(
         NotebookListScreen(
             vm = vm,
             onSignIn = launchSignIn,
+            onPickStorageFolder = { pickStorageFolderLauncher.launch(null) },
             onSignInOneDrive = launchOneDriveSignIn,
         )
     } else {
