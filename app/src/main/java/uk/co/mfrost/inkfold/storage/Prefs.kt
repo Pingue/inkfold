@@ -6,7 +6,10 @@ import uk.co.mfrost.inkfold.drawing.EraserMode
 import uk.co.mfrost.inkfold.drawing.ToolSettings
 import uk.co.mfrost.inkfold.model.ToolType
 
-/** Persists the editor's tool selection and pen/touch mode across sessions. */
+/**
+ * Persists the editor's tool selection and pen/touch mode across sessions,
+ * plus app-wide settings such as the chosen document storage location.
+ */
 class Prefs(context: Context) {
 
     private val sp = context.getSharedPreferences("editor", Context.MODE_PRIVATE)
@@ -15,6 +18,15 @@ class Prefs(context: Context) {
     var penMode: Boolean
         get() = sp.getBoolean(KEY_PEN_MODE, false)
         set(value) { sp.edit().putBoolean(KEY_PEN_MODE, value).apply() }
+
+    /**
+     * The `content://` tree URI of the folder the user picked to store documents
+     * in, or null to use the app's private storage. See
+     * [uk.co.mfrost.inkfold.storage.DocumentRepository.moveStorageTo].
+     */
+    var storageTreeUri: String?
+        get() = sp.getString(KEY_STORAGE_TREE_URI, null)
+        set(value) { sp.edit().putString(KEY_STORAGE_TREE_URI, value).apply() }
 
     fun loadSettings(): ToolSettings = ToolSettings(
         tool = enumOr(sp.getString(KEY_TOOL, null), ToolType.PEN),
@@ -50,5 +62,6 @@ class Prefs(context: Context) {
         const val KEY_HL_SIZE = "hlSize"
         const val KEY_ERASER_SIZE = "eraserSize"
         const val KEY_ERASER_MODE = "eraserMode"
+        const val KEY_STORAGE_TREE_URI = "storageTreeUri"
     }
 }
