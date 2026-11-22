@@ -45,17 +45,15 @@ jobs:
             fi
           fi
           version_name="${major}.${minor}.${patch}"
-          version_code=$((major * 10000 + minor * 100 + patch))
-          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
-            # A Play upload can consume a code even if the release is never
-            # tagged. Use the current time so a retry gets a fresh code.
-            play_version_code=$(date -u +%s)
-            if [ "$play_version_code" -le "$version_code" ] || [ "$play_version_code" -gt 2100000000 ]; then
-              echo "Cannot safely assign Play version code: $play_version_code" >&2
-              exit 1
-            fi
-            version_code="$play_version_code"
-          else
+          # A Play upload can consume a code even if the release is never
+          # tagged. Use the current time so a retry gets a fresh code, and
+          # development builds can still update installed release builds.
+          version_code=$(date -u +%s)
+          if [ "$version_code" -le "$((major * 10000 + minor * 100 + patch))" ] || [ "$version_code" -gt 2100000000 ]; then
+            echo "Cannot safely assign version code: $version_code" >&2
+            exit 1
+          fi
+          if [ "${{ github.ref }}" != "refs/heads/main" ] || [ "${{ github.event_name }}" != "push" ]; then
             version_name="${version_name}-dev"
           fi
           echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
