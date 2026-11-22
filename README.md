@@ -144,6 +144,14 @@ manual dispatch). It:
 Download the APK from the **Artifacts** section of a completed run and sideload
 it onto your device.
 
+Main-branch releases use the next Git tag for the version name. All CI builds
+use the UTC Unix timestamp in seconds for the version code, so development
+builds can update installed releases and a retry gets a new Play code even if
+a previous upload consumed one before the release was tagged.
+Keep manually uploaded Play version codes below the timestamp-based codes; Play
+limits version codes to 2,100,000,000, so this scheme must be replaced before
+that timestamp is reached in 2036.
+
 ### Claude-assisted issue triage
 
 Two workflows let Claude turn a GitHub issue into a pull request, with a
