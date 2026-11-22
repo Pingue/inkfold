@@ -6,10 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Serialise runs per branch: version_code/version_name are derived from the
-# latest git tag at checkout, so two runs for the same branch racing each
-# other can compute the same next version and collide (one gets rejected by
-# Play Console for reusing a version code, and never gets to tag the release).
+# Serialise runs per branch so main releases cannot race when choosing their
+# next tag or Play version code.
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
@@ -48,7 +46,16 @@ jobs:
           fi
           version_name="${major}.${minor}.${patch}"
           version_code=$((major * 10000 + minor * 100 + patch))
-          if [ "${{ github.ref }}" != "refs/heads/main" ] || [ "${{ github.event_name }}" != "push" ]; then
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            # A Play upload can consume a code even if the release is never
+            # tagged. Use the current time so a retry gets a fresh code.
+            play_version_code=$(date -u +%s)
+            if [ "$play_version_code" -le "$version_code" ] || [ "$play_version_code" -gt 2100000000 ]; then
+              echo "Cannot safely assign Play version code: $play_version_code" >&2
+              exit 1
+            fi
+            version_code="$play_version_code"
+          else
             version_name="${version_name}-dev"
           fi
           echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"

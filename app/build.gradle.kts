@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // CI overrides these via -PversionCodeOverride/-PversionNameOverride so
-        // released builds carry the semver-derived version computed in
-        // build.yml; local/default builds keep these hardcoded values.
+        // released builds carry the version computed in build.yml;
+        // local/default builds keep these hardcoded values.
         versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 1
         versionName = project.findProperty("versionNameOverride") as String? ?: "1.0"
 
