@@ -109,7 +109,7 @@ app/src/main/java/uk/co/mfrost/inkfold/
 
 ## Building
 
-You need JDK 17 and the Android SDK (`compileSdk` 36). The Gradle wrapper is
+You need JDK 17 and the Android SDK (`compileSdk` 37.1). The Gradle wrapper is
 checked in.
 
 ```bash
